@@ -1,0 +1,3 @@
+/files2/scratch/slz839/fermi/ND_data/neardet_r00011990_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+/files2/scratch/slz839/fermi/ND_data/neardet_r00011990_s07_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+/files2/scratch/slz839/fermi/ND_data/neardet_r00011990_s08_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5

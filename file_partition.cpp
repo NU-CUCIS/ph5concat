@@ -103,6 +103,9 @@ int Concatenator::write_partition_key_datasets()
         if (err < 0) HANDLE_ERROR("write_dataset_2D")
         delete [] cnt_dset->cnt_buf;
 
+        err = H5Dclose(cnt_dset->out_dset_id);
+        if (err < 0) HANDLE_ERROR("H5Dclose");
+
         err = H5Gclose(grp_id);
         if (err < 0) HANDLE_ERROR("H5Gclose")
         kk++;

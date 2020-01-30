@@ -576,11 +576,12 @@ int main(int argc, char **argv)
     size_t num_orig_groups, num_nonzero_groups;
     size_t max_seq=0, max_cnt=0, min_seq, min_cnt, avg_seq, avg_cnt;
     struct op_data it_op;
+    double timing[13];
+
 #if defined PROFILE && PROFILE
-    double ts=0.0, te=0.0, timing[13];
+    double ts=0.0, te=0.0;
     dopen_time = dcreate_time = dread_time = dwrite_time = dclose_time = 0.0;
 #endif
-
     for (c=0; c<13; c++) timing[c] = 0.0;
 
     verbose = 0; /* default is quiet */

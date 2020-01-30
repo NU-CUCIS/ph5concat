@@ -346,7 +346,7 @@ else
    AC_DEFINE(MPI_HSIZE_T, MPI_UNSIGNED_INT, [Define MPI datatype corresponding to hsize_t])
 fi
 
-AC_CONFIG_FILES(Makefile utils/Makefile)
+AC_CONFIG_FILES(Makefile utils/Makefile examples/Makefile)
 
 AC_OUTPUT
 echo "------------------------------------------------------------------------------"

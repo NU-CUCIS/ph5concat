@@ -24,6 +24,11 @@ files into a single one by appending individual datasets one after another.
 * An HDF5 library version  1.10.5 and later built with parallel I/O feature enabled
 
 ## Instructions to Build
+0. If building from a git clone of this repository, then run command below first.
+   Otherwise, if building from an official release, this step can be skipped.
+   ```
+   autoreconf -i
+   ```
 1. Run command 'configure', for example
    ```
    ./configure --with-mpi=$HOME/MPICH/3.3 \
@@ -79,7 +84,7 @@ files into a single one by appending individual datasets one after another.
     read by all processes collectively (i.e. shared-file reads) and then all
     processes collectively write to the output file.
 
-## An example output shown on screen
+## An example output shown on screen from a run on Cori using 128 MPI processes.
   ```
   % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt -x
 
@@ -136,6 +141,26 @@ files into a single one by appending individual datasets one after another.
   Close output files total:               0.4799
   End-to-end:                           314.8095
   ```
+## Sample input and output files
+* There are four sample input files provided in folder `examples`.
+  + examples/sample_input_1.h5
+  + examples/sample_input_2.h5
+  + examples/sample_input_3.h5
+  + examples/sample_input_4.h5
+* Sample run commands
+  ```
+  mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
+  mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
+  ```
+  The output shown on screen is stored in `examples/sample_stdout.txt`.
+* Sample output files
+  + The output files from concatenating the 4 sample files are available in
+    `examples/sample_output.h5` whose metadata dumped from command below is
+    also available in `examples/sample_output.metadata`.
+    ```
+    h5dump -Hp sample_output.h5
+    ```
+
 ## Questions/Comments:
 * Sunwoo Lee <slz839@eecs.northwestern.edu>
 * Wei-keng Liao <wkliao@eecs.northwestern.edu>
@@ -143,5 +168,7 @@ files into a single one by appending individual datasets one after another.
 ## Project funding supports:
 This material is based upon work supported by the U.S. Department of Energy,
 Office of Science, Office of Advanced Scientific Computing Research, Scientific
-Discovery through Advanced Computing (SciDAC) program.
+Discovery through Advanced Computing ([SciDAC](https://www.scidac.gov)) program.
+This work is a collaboration of [RAPIDS Institute](https://rapids.lbl.gov) and
+[HEP Data Analytics on HPC](https://computing.fnal.gov/hep-on-hpc/).
 

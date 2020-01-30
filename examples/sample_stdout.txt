@@ -1,0 +1,54 @@
+Number of input HDF5 files: 4
+Input directory name: .
+Output file name: ./out.h5
+Output datasets are compressed with level 6
+Read metadata from input files takes 0.0094 seconds
+Create output file + datasets takes 0.0135 seconds
+Concatenating 1D datasets takes 0.0355 seconds
+Writ partition key datasets takes 0.0101 seconds
+Concatenating 2D datasets takes 0.0051 seconds
+Close input files takes 0.0004 seconds
+Close output files takes 0.0009 seconds
+-------------------------------------------------------------
+Input directory name:                    .
+Number of input HDF5 files:              4
+Output HDF5 file name:                   ./out.h5
+Parallel I/O strategy:                   2
+Use POSIX I/O to open file:              ON
+POSIX In-memory I/O:                     ON
+1-process-create-followed-by-all-open:   OFF
+Chunk caching for raw data:              ON
+Enable calls to H5Dset_extent:           ON
+GZIP level:                              6
+Internal I/O buffer size:                128.0 MiB
+Dataset used to produce partition key:   evt
+Name of partition key datasets:          evt.key.seq, evt.key.cnt
+-------------------------------------------------------------
+Number of groups:                           3
+Number of non-zero-sized groups:            2
+Number of groups have partition key:        2
+Total number of datasets:                  27
+Total number of non-zero datasets:         19
+-------------------------------------------------------------
+Number of MPI processes:                    2
+Number calls to MPI_Allreduce:              4
+Number calls to MPI_Exscan:                 2
+-------------------------------------------------------------
+H5Dcreate:                              0.0123
+H5Dread   for 1D datasets:              0.0089
+H5Dwrite  for 1D datasets:              0.0310
+H5Dread   for 2D datasets:              0.0015
+H5Dwrite  for 2D datasets:              0.0035
+H5Dclose  for  input datasets:          0.0009
+H5Dclose  for output datasets:          0.0003
+H5Dset_extent for key.cnt datasets:     0.0026
+-------------------------------------------------------------
+Read metadata from input files:         0.0094
+Create output file + datasets:          0.0135
+Concatenate small datasets:             0.0355
+Write to partition key datasets:        0.0102
+Concatenate large datasets:             0.0051
+Close  input files:                     0.0004
+Close output files:                     0.0009
+End-to-end:                             0.0750
+

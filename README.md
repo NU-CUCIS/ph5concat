@@ -1,27 +1,29 @@
-# Parallel Data Concatenation for High Energy Physics Data Analysis
+# Parallel HDF5 Dataset Concatenation for High Energy Physics Data Analysis
 
-This software package contains C++ programs for concatenating multiple HDF5
-files into a single one by appending individual datasets one after another.
+This software package contains C++ programs for concatenating HDF5 datasets
+across multiple files into a single file by appending individual datasets one
+after another.
 
 ## Input HDF5 Files
 * Each file contains multiple groups, each representing a "relational database
   table".
-* Each group contains multiple datasets, each representing a column of the
+* Each group contains multiple datasets. The number of datasets in a group can
+  be different from others. Each dataset can be considered as a column of the
   database table.
 * Datasets in the same group are 2D arrays sharing the same size of 1st
-  dimension (most significant). The size of 2nd dimension may be different.
-* Some of the datasets are actually 1D arrays whose 2nd dimension if of size 1.
-* Datasets can be of size zero, i.e. either dimension is of size 0.
-* All the files have the same "schema", i.e. same structure of groups and
-  datasets.
-* A dataset in an input file may be of different 1st dimension size from the
-  one in other files, while the 2nd dimension should be of the same size
-  across files.
+  (most significant) dimension. The 2nd dimension size may be different.
+* Some of the datasets are actually 1D arrays whose 2nd dimension is of size 1.
+* Datasets can be of size zero, i.e. the 1st dimension being of size 0.
+* All the files have the same "schema", i.e. same numbers of groups and
+  datasets with the same names.
+* The size of 1st dimension of a dataset in an input file may be different from
+  the dataset with the same name in other files. The 2nd dimension should be of
+  the same size across all input files.
 
 ## Software Requirements
 * A C++ compiler that support ISO C++0x standard or higher
 * MPI C and C++ compilers
-* An HDF5 library version  1.10.5 and later built with parallel I/O feature enabled
+* An HDF5 library version 1.10.5 and later built with parallel I/O feature enabled
 
 ## Instructions to Build
 0. If building from a git clone of this repository, then run command below first.
@@ -42,7 +44,7 @@ files into a single one by appending individual datasets one after another.
 2. Run command "make" to create the executable file named "ph5_concat"
 
 ## Command to Run
-* Run command and command-line options are:
+* Command-line options are:
   ```
   mpiexec -n <np> ./ph5_concat [-h|-q|-d|-r|-s|-p|-x] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]
 
@@ -84,7 +86,27 @@ files into a single one by appending individual datasets one after another.
     read by all processes collectively (i.e. shared-file reads) and then all
     processes collectively write to the output file.
 
-## An example output shown on screen from a run on Cori using 128 MPI processes.
+## Sample input and output files
+* There are four sample input files provided in folder `examples`.
+  + examples/sample_input_1.h5
+  + examples/sample_input_2.h5
+  + examples/sample_input_3.h5
+  + examples/sample_input_4.h5
+* Sample run commands
+  ```
+  mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
+  mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
+  ```
+  The output shown on screen is stored in `examples/sample_stdout.txt`.
+* Sample output files
+  + The output files from concatenating the 4 sample files are available in
+    `examples/sample_output.h5` whose metadata dumped from command below is
+    also available in `examples/sample_output.metadata`.
+    ```
+    h5dump -Hp sample_output.h5
+    ```
+
+## An example timing output from a run on Cori using 128 MPI processes.
   ```
   % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt -x
 
@@ -141,25 +163,6 @@ files into a single one by appending individual datasets one after another.
   Close output files total:               0.4799
   End-to-end:                           314.8095
   ```
-## Sample input and output files
-* There are four sample input files provided in folder `examples`.
-  + examples/sample_input_1.h5
-  + examples/sample_input_2.h5
-  + examples/sample_input_3.h5
-  + examples/sample_input_4.h5
-* Sample run commands
-  ```
-  mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
-  mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
-  ```
-  The output shown on screen is stored in `examples/sample_stdout.txt`.
-* Sample output files
-  + The output files from concatenating the 4 sample files are available in
-    `examples/sample_output.h5` whose metadata dumped from command below is
-    also available in `examples/sample_output.metadata`.
-    ```
-    h5dump -Hp sample_output.h5
-    ```
 
 ## Questions/Comments:
 * Sunwoo Lee <slz839@eecs.northwestern.edu>

@@ -26,9 +26,6 @@ int Concatenator::write_partition_key_datasets()
     herr_t err;
     hsize_t ii, jj, kk, start[2]={0,0}, count[2]={1,1};
     hsize_t *seq_offs, *seq_lens, *cnt_offs, *cnt_lens, *extents;
-#if defined PROFILE && PROFILE
-    double ts;
-#endif
 
     /* some groups may not contain key-base datasets */
     cnt_lens = new hsize_t[num_groups_have_key * 5];
@@ -160,6 +157,9 @@ int Concatenator::write_partition_key_datasets()
          * consecutive elements sharing the same key.
          */
         if (set_extent) {
+#if defined PROFILE && PROFILE
+            double ts;
+#endif
             SET_TIMER(ts)
             count[0] = extents[kk];
             err = H5Dset_extent(cnt_dset->out_dset_id, count);
@@ -186,6 +186,9 @@ int Concatenator::write_partition_key_datasets()
          * Below, we use a separate loop to call H5Dset_extent() altogether
          * after all calls to H5Dwrite() are complete.
          */
+#if defined PROFILE && PROFILE
+        double ts;
+#endif
         SET_TIMER(ts)
         kk = 0;
         for (ii=0; ii<num_groups; ii++) {

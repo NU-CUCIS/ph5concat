@@ -296,11 +296,14 @@ int Concatenator::create_partition_keys(GrpInfo &grp)
     seq.is_key_seq = true;
     seq.is_key_cnt = false;
     seq.name       = part_key_base + ".key.seq";
-#ifndef DELAY_KEY_DSET_CREATION
-    /* delay creation until writing it in write_partition_key_datasets() */
-    herr_t err = create_dataset(grp.id, seq, true);
-    if (err < 0) RETURN_ERROR("create_dataset", "key.seq")
+#ifdef DELAY_KEY_DSET_CREATION
+    if (seq.global_dims[0] == 0)
 #endif
+    {
+        /* delay creation until writing it in write_partition_key_datasets() */
+        herr_t err = create_dataset(grp.id, seq, false);
+        if (err < 0) RETURN_ERROR("create_dataset", "key.seq")
+    }
     grp.seq_dset = &seq;
     total_num_datasets++;
 
@@ -310,11 +313,14 @@ int Concatenator::create_partition_keys(GrpInfo &grp)
     cnt.is_key_cnt = true;
     cnt.is_key_seq = false;
     cnt.name       = part_key_base + ".key.cnt";
-#ifndef DELAY_KEY_DSET_CREATION
-    /* delay creation until writing it in write_partition_key_datasets() */
-    err = create_dataset(grp.id, cnt, true);
-    if (err < 0) RETURN_ERROR("create_dataset", "key.cnt")
+#ifdef DELAY_KEY_DSET_CREATION
+    if (cnt.global_dims[0] == 0)
 #endif
+    {
+        /* delay creation until writing it in write_partition_key_datasets() */
+        herr_t err = create_dataset(grp.id, cnt, !set_extent);
+        if (err < 0) RETURN_ERROR("create_dataset", "key.cnt")
+    }
     grp.cnt_dset = &cnt;
     total_num_datasets++;
 
@@ -950,8 +956,12 @@ int Concatenator::create_dataset(hid_t     group_id,
             if (err < 0) HANDLE_ERROR("H5Pset_deflate")
         }
 
-        /* HDF5 default fill value is 0 */
-        if (!toFill) {
+        if (toFill) {
+            /* HDF5 default fill value is 0, skip call H5Pset_fill_value() */
+            err = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_ALLOC);
+            if (err < 0) HANDLE_ERROR("H5Pset_fill_time")
+        }
+        else {
             /* Never fill in the chunk in advance. */
             err = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
             if (err < 0) HANDLE_ERROR("H5Pset_fill_time")

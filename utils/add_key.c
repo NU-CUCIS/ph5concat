@@ -601,7 +601,7 @@ int main(int argc, char **argv)
             default: break;
         }
 
-    if (part_key_base == NULL) { /* input file name is mandatory */
+    if (part_key_base == NULL) { /* key base dataset name is mandatory */
         printf("Error: partition key base dataset name is missing.\n\n");
         usage(argv[0]);
         err_exit = -1;

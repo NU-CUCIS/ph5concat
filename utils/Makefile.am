@@ -4,9 +4,7 @@
 #
 # @configure_input@
 
-SUFFIXES = .c .h .o
-
-AM_DEFAULT_SOURCE_EXT = .c
+SUFFIXES = .cpp .c .h .o
 
 AM_CPPFLAGS = -I.
 if PH5CONCAT_DEBUG
@@ -19,13 +17,16 @@ endif
 noinst_PROGRAMS = rechunk \
                   add_key
 
+rechunk_SOURCES = rechunk.c
+add_key_SOURCES = add_key.cpp
+
 EXTRA_DIST = README.md \
              batch.sh
 
 dist-hook:
 	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/rechunk.c
 	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/rechunk.c
-	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/add_key.c
-	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/add_key.c
+	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/add_key.cpp
+	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/add_key.cpp
 
 .PHONY:

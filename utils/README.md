@@ -67,81 +67,72 @@
 ## add_key
 
 * **add_key** is a utility program to be run in sequential. It adds each group
-  two datasets to be used to calculate data partitioning for parallel programs
-  that read the file. These two datasets are referred as partitioning key
-  datasets. Their contents are calculated based on another dataset in the group
-  chosen by the user, which is referred as the 'base' dataset. Together with
-  'run' and 'subrun' datasets, the base dataset can uniquely identify data
-  entries in a group that need to be processed as an unit. Thus the 3-tuple
-  (run, subrun, base) works similarly to the primary key in relational
-  database. When used for data partitioning, all data entries sharing the same
-  3-tuple are assigned to the same MPI process.
+  a new dataset named `evtseq` to be used to calculate data partitioning for
+  parallel programs that read the file. Dataset `evtseq` is referred as
+  partitioning key dataset. Its contents are calculated based on three existing
+  datasets in the same group: `run`, `subrun`, and `evt`. The 3-tuple (run[i],
+  subrun[i], evt[i]) forms a unique ID. Data elements with the same ID are to
+  be assigned to the same MPI processes when the file is read in parallel. The
+  3-tuple (run, subrun, base) works similarly to the primary key in relational
+  database. Generation of `evtseq` is described as followed.
 
-  The two key datasets to be added have file names '.key.seq' and '.key.cnt'
-  appended to the base name. For example, if the base dataset name is 'evt',
-  then the two key datasets are 'evt.key.seq' and 'evt.key.cnt'. Dataset
-  'key.seq' contains integer numbers corresponding to the unique 3-tuples in
-  a group, starting from value 0 and ending with the number of unique 3-tuples
-  minus one. Essentially, the values are a sequence of numbers incremented by
-  one for every two consecutive entries whose 3-tuples are different. Dataset
-  'key.cnt' stores the counters of unique 3-tuples. Its ith element contains
-  the number of entries that share the same 3-tuple (also the ith unique
-  3-tuple value). The length of 'key.cnt' can be shorter than 'key.seq', while
-  the length of 'key.seq' is the same as all other datasets in the group.
+  Datasets `run`, `subrun`, and `evt` in group `spill` are used to construct a
+  C++ `unordered_map` to form a hash table, where (run[i], subrun[i], evt[i])
+  is used as a hashing key. Dataset `evtseq` stores the hash values. Note the
+  values in `evtseq` are consistent among datasets cross all groups. In other
+  words, two dataset elements have the same `evtseq` value if their 3-tuples
+  are the same.
+
+  Note the integer numbers in `evtseq` are in a monotonically nondecreasing
+  order. Values can be repeated.
 
 The command usage is shown below.
   ```
   % ./add_key -h
-  Usage: add_key [-h|-v] -k dataset_name file_name
-    [-h]             print this command usage message
-    [-v]             verbose mode (default: off)
-    -k dataset_name  name of dataset used to generate partitioning keys (required)
-    file_name        HDF5 file name (required)
+  Usage: add_key [-h|-v] file_name
+    [-h]       print this command usage message
+    [-v]       verbose mode (default: off)
+    file_name  HDF5 file name (required)
 
-    This utility program adds partitioning key datasets, key.seq and key.cnt,
-    to an HDF5 file.
-
+    This utility program adds a new dataset named evtseq to be used for
+    parallel read data partitioning to an input HDF5 file. The contents of
+    evtseq are generated based on 3 datasets run, subrun, and evt in group
+    spill. 3-tuple (run[i], subrun[i], evt[i]) serves a unique identiifier
+    such that data elements of all groups with the same 3-tuple are assigned
+    to the same MPI process when the file is read in parallel by multiple
+    processes.
     Requirements for the HDF5 file:
       1. contains multiple groups only at root level
-      2. each group may  contain multiple 2D datasets
-    Requirements for the partitioning base daatset:
-      1. the second dimension size of base dataset must be 1
-      2. if base dataset is missing in a group, the key datasets will not be
-         generated for that group
-      3. currently supports base dataset of type either 4-byte unsigned int or
-         2-byte short int
+      2. each group may contain multiple 2D datasets
+      3. all datasets in the same group share the 1st dimension size
+      4. each group must contain datasets run, subrun, and evt
+      5. the second dimension size of the 3 daatsets must be 1
+      6. data type of the 3 datasets msut be H5T_STD_U32LE
+    *ph5concat version 1.1.0 of March 1, 2020.
   ```
   Example run and output:
   ```
-  % ./add_key -k evt nd_data_165_files.h5
+  % ./add_key nd_data_165_files.h5
 
   Dry-run mode                      = NO
   Input file name                   = nd_data_165_files.h5
   Partition key base dataset name   = evt
   number of groups in the file      = 999
-  number of groups contain key base = 999
-  number of non-zero key bases      = 108
-  Partition key evt.key.seq :
+  number of non-zero size groups    = 108
+  Partition key name                = evtseq
     max length among all groups     = 1695404032
     min length among all groups     = 193325
     avg length among all groups     = 30787342
-  Partition key evt.key.cnt :
-    max length among all groups     = 410679
-    min length among all groups     = 152244
-    avg length among all groups     = 367746
   -------------------------------------------------------
   Open input file                   =    0.00 sec
-  Collect partition key base names  =    0.68 sec
-  Add partition key datasets        =  721.86 sec
-    Create zero-size key datasets   =    0.19 sec
+  Collect group names               =    0.68 sec
+  Read 'spill' 3-tuples             =    0.01 sec
+  Construct lookup table            =    0.00 sec
+  Add partition key dataset         =  721.86 sec
     Read run, subrun, base datasets =  111.33 sec
-    Generate key.seq and key.cnt    =   30.19 sec
-    Create key.seq                  =    0.06 sec
-    Write  key.seq                  =  505.88 sec
-    Close  key.seq                  =   55.88 sec
-    Create key.cnt                  =    0.22 sec
-    Write  key.cnt                  =    0.36 sec
-    Close  key.cnt                  =   17.78 sec
+    Key lookup                      =  610.00 sec
+    Write key.seq                   =    0.53 sec
+    Close key.seq                   =    1.05 sec
   File close                        =    0.08 sec
   -------------------------------------------------------
   End-to-end                        =  722.81 sec

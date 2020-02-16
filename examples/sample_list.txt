@@ -1,4 +1,4 @@
-./sample_input_1.h5
-./sample_input_2.h5
-./sample_input_3.h5
-./sample_input_4.h5
+./sample_r11981_s06.h5
+./sample_r11981_s07.h5
+./sample_r11981_s08.h5
+./sample_r11981_s09.h5

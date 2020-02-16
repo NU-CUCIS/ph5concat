@@ -32,7 +32,6 @@ Concatenator::Concatenator(int                nprocs,
                            bool               posix_open,
                            bool               in_memory_io,
                            bool               chunk_caching,
-                           bool               set_extent,
                            size_t             compress_threshold,
                            bool               one_process_create,
                            unsigned int       zip_level,
@@ -49,7 +48,6 @@ Concatenator::Concatenator(int                nprocs,
     posix_open(posix_open),
     in_memory_io(in_memory_io),
     chunk_caching(chunk_caching),
-    set_extent(set_extent),
     compress_threshold(compress_threshold),
     one_process_create(one_process_create),
     io_strategy(io_strategy),
@@ -71,10 +69,18 @@ Concatenator::Concatenator(int                nprocs,
     original_total_num_datasets = 0;
     total_num_datasets = 0;
 
+    /* whether to create a partition key dataset in each group */
     if (part_key_base.compare("") == 0)
-        add_partition_keys = false;
+        add_partition_key = false;
     else
-        add_partition_keys = true;
+        add_partition_key = true;
+
+    /* spill's group index in groups[] array */
+    spill_grp_no = -1;
+    /* hash lookup tables, one per input file, built based on the user
+     * indicated key base dataset in group /spill
+     */
+    lookup_table = new table[num_input_files];
 
     async_reqs = new MPI_Request[nprocs * 2];
     async_statuses = new MPI_Status[nprocs * 2];
@@ -90,7 +96,6 @@ Concatenator::Concatenator(int                nprocs,
     o_f = 0;
     close_in_dsets = 0;
     close_out_dsets = 0;
-    t_set_extent = 0;
     num_allreduce = 0;
     num_exscan = 0;
 }
@@ -108,6 +113,7 @@ Concatenator::~Concatenator()
         delete [] groups[ii].dsets;
     }
     delete [] groups;
+    delete [] lookup_table;
 
     delete []async_reqs;
     delete []async_statuses;
@@ -215,6 +221,16 @@ int Concatenator::construct_metadata(std::vector<std::string> const &inputs)
         err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this);
         if (err < 0) HANDLE_ERROR("H5Ovisit")
 
+        /* if partition key dataset is to be added and group /spill cannot be
+         * found, then error out.
+         */
+        if (add_partition_key && spill_grp_no == -1) {
+            fprintf(stderr, "Error: group /spill cannot be found in file %s\n",
+                    it->c_str());
+            err_exit = -1;
+            goto fn_exit;
+        }
+
         /* Instead of closing the input files, we keep the file handles
          * and re-use them later when concatenating datasets.
          */
@@ -227,12 +243,20 @@ int Concatenator::construct_metadata(std::vector<std::string> const &inputs)
     }
 
     /* check if partitioning key base dataset in each group is found */
-    if (add_partition_keys) {
+    if (add_partition_key) {
         for (size_t ii=0; ii<num_groups; ii++) {
             if (groups[ii].key_base == NULL) {
                 printf("[%d] Warning: partition key base '%s' cannot be found in group '%s'\n",
                        rank, part_key_base.c_str(), groups[ii].name.c_str());
             }
+        }
+	/* error out if the partition key base dataset is not found in group
+         * /spill
+         */
+	if (groups[spill_grp_no].key_base == NULL) {
+            fprintf(stderr, "Error: partiition key base dataset '/spill/%s' coonnot be found\n", part_key_base.c_str());
+            err_exit = -1;
+            goto fn_exit;
         }
     }
 
@@ -275,16 +299,20 @@ fn_exit:
     return err_exit;
 }
 
-/*----< create_partition_keys() >--------------------------------------------*/
-int Concatenator::create_partition_keys(GrpInfo &grp)
+/*----< create_partition_key() >---------------------------------------------*/
+/* Create a new partition key dataset in a group by inheriting most of the
+ * metadata of the base dataset.
+ */
+int Concatenator::create_partition_key(GrpInfo &grp)
 {
     DSInfo_t &seq = grp.dsets[grp.num_dsets++];
-    DSInfo_t &cnt = grp.dsets[grp.num_dsets++];
 
-    /* copy contents of base over to key.seq */
+    /* copy contents of base dataset over to key dataset, seq */
     seq = *grp.key_base;
 
     seq.is_key_base = false;
+    seq.is_key_seq  = true;
+    seq.name        = part_key_base + ".seq";
     seq.type_id     = H5T_STD_I64LE;
     seq.type_size   = H5Tget_size(H5T_STD_I64LE);
     if (seq.global_dims[0] == 0)
@@ -292,36 +320,9 @@ int Concatenator::create_partition_keys(GrpInfo &grp)
     else
         seq.layout = H5D_CHUNKED;
 
-    /* create dataset key.seq */
-    seq.is_key_seq = true;
-    seq.is_key_cnt = false;
-    seq.name       = part_key_base + ".key.seq";
-#ifdef DELAY_KEY_DSET_CREATION
-    if (seq.global_dims[0] == 0)
-#endif
-    {
-        /* delay creation until writing it in write_partition_key_datasets() */
-        herr_t err = create_dataset(grp.id, seq, false);
-        if (err < 0) RETURN_ERROR("create_dataset", "key.seq")
-    }
+    herr_t err = create_dataset(grp.id, seq, false);
+    if (err < 0) RETURN_ERROR("create_dataset", seq.name.c_str())
     grp.seq_dset = &seq;
-    total_num_datasets++;
-
-    cnt = seq; /* copy contents of seq object over to cnt */
-
-    /* create dataset key.cnt */
-    cnt.is_key_cnt = true;
-    cnt.is_key_seq = false;
-    cnt.name       = part_key_base + ".key.cnt";
-#ifdef DELAY_KEY_DSET_CREATION
-    if (cnt.global_dims[0] == 0)
-#endif
-    {
-        /* delay creation until writing it in write_partition_key_datasets() */
-        herr_t err = create_dataset(grp.id, cnt, !set_extent);
-        if (err < 0) RETURN_ERROR("create_dataset", "key.cnt")
-    }
-    grp.cnt_dset = &cnt;
     total_num_datasets++;
 
     return 0;
@@ -438,13 +439,14 @@ int Concatenator::file_create()
                 }
             }
 
-            /* Once all the datasets have been created, create new partitioning
-             * key datasets in file and memory if add_partition_keys is true
+            /* After all the datasets have been created, create a new partition
+             * key dataset in each group. Note the partition key base dataset
+	     * may be missing in a group. In this case, the key seq dataset
+	     * will not be created for that group.
              */
-            if (add_partition_keys && groups[ii].key_base != NULL) {
-                /* keep key datasets open for later read to concatenate */
-                err = create_partition_keys(groups[ii]);
-                if (err < 0) HANDLE_ERROR("create_partition_keys")
+            if (add_partition_key && groups[ii].key_base != NULL) {
+                err = create_partition_key(groups[ii]);
+                if (err < 0) HANDLE_ERROR("create_partition_key")
             }
 
             err = H5Gclose(group_id);
@@ -485,13 +487,14 @@ int Concatenator::file_create()
                 if (err < 0) HANDLE_ERROR("create_dataset")
             }
 
-            /* Once all the datasets have been created, create new partitioning
-             * key datasets in file and memory if add_partition_keys is true
+            /* After all the datasets have been created, create a new partition
+             * key dataset in each group. Note the partition key base dataset
+	     * may be missing in a group. In this case, the key seq dataset
+	     * will not be created for that group.
              */
-            if (add_partition_keys && groups[ii].key_base != NULL) {
-                /* keep key datasets open for later read to concatenate */
-                err = create_partition_keys(groups[ii]);
-                if (err < 0) HANDLE_ERROR("create_partition_keys")
+            if (add_partition_key && groups[ii].key_base != NULL) {
+                err = create_partition_key(groups[ii]);
+                if (err < 0) HANDLE_ERROR("create_partition_key")
             }
 
             err = H5Gclose(group_id);
@@ -504,7 +507,7 @@ int Concatenator::file_create()
     /* save the original total number of datasets */
     original_total_num_datasets = total_num_datasets;
 
-    /* remove zero-sized datasets from each group */
+    /* remove zero-sized datasets from each group from groups[].dsets[] */
     for (ii=0; ii<num_groups; ii++) {
         kk = -1;
         for (jj=0; jj<groups[ii].num_dsets; jj++) {
@@ -518,13 +521,11 @@ int Concatenator::file_create()
                     groups[ii].key_base = groups[ii].dsets + kk;
                 else if (groups[ii].dsets[kk].is_key_seq)
                     groups[ii].seq_dset = groups[ii].dsets + kk;
-                else if (groups[ii].dsets[kk].is_key_cnt)
-                    groups[ii].cnt_dset = groups[ii].dsets + kk;
             }
         }
         groups[ii].num_dsets = kk + 1;
     }
-    /* remove empty groups */
+    /* remove empty groups from groups[] */
     num_groups_have_key = 0;
     kk = -1;
     for (ii=0; ii<num_groups; ii++) {
@@ -541,11 +542,10 @@ int Concatenator::file_create()
     num_groups = kk + 1;
 
 #if defined DEBUG && DEBUG
-    if (add_partition_keys) {
+    if (add_partition_key) {
         for (ii=0; ii<num_groups; ii++) {
             if (groups[ii].key_base != NULL) {
                 assert(groups[ii].seq_dset->is_key_seq);
-                assert(groups[ii].cnt_dset->is_key_cnt);
             }
         }
     }
@@ -601,11 +601,13 @@ int Concatenator::collect_metadata(hid_t             obj_id,
 
         if (file_no == 0) { /* set only when reading the 1st file */
             groups[grp_no].name.assign(name);
-            /* +2 is for two additional partitioning key datasets */
-            groups[grp_no].dsets = new DSInfo_t[grp_info.nlinks + 2];
+            /* +1 is for an additional partitioning key dataset */
+            groups[grp_no].dsets = new DSInfo_t[grp_info.nlinks + 1];
             groups[grp_no].key_base = NULL;
             groups[grp_no].seq_dset = NULL;
-            groups[grp_no].cnt_dset = NULL;
+
+            /* save the groups[] array index of group /spill */
+            if (!strcmp(name, "spill")) spill_grp_no = grp_no;
         }
         groups[grp_no].num_dsets = 0; /* to be increased in later visit */
     }
@@ -649,13 +651,22 @@ int Concatenator::collect_metadata(hid_t             obj_id,
             if (dset.type_size < 0) RETURN_ERROR("H5Tget_size",name)
             dset.layout        = H5D_CHUNKED; /* default */
             dset.is_key_seq    = false;
-            dset.is_key_cnt    = false;
             dset.is_key_base   = false;
-            /* check if this is the partition key base */
-            if (add_partition_keys && groups[grp_no].key_base == NULL &&
-                part_key_base.compare(dataset_name) == 0) {
-                dset.is_key_base = true;
-                groups[grp_no].key_base = &dset;
+
+            if (add_partition_key) {
+                string key_name = part_key_base + ".seq";
+                /* check if key dataset 'seq' has already existed */
+                if (key_name.compare(dataset_name) == 0) {
+                    printf("Error: dataset '%s' already existed in group %s\n",
+                           dataset_name,group_name);
+                    return -1;
+                }
+                /* check if this is the partition key base */
+                if (part_key_base.compare(dataset_name) == 0) {
+                    assert(groups[grp_no].key_base == NULL);
+                    dset.is_key_base = true;
+                    groups[grp_no].key_base = &dset;
+                }
             }
             total_num_datasets++;
         }
@@ -1003,7 +1014,7 @@ int Concatenator::create_dataset(hid_t     group_id,
     /* no need to keep zero-sized datasets open */
     if (dset.global_dims[0] == 0) {
         if (dset.type_id != H5T_STD_I64LE) {
-            /* the two partitioning key datasets are created using predefined
+            /* the partitioning key dataset is created using the predefined
              * datatype H5T_STD_I64LE. It is illegal to close predefined type.
              */
             err = H5Tclose(dset.type_id);

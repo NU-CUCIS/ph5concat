@@ -49,7 +49,6 @@ public:
     bool posix_open;
     bool in_memory_io;
     bool chunk_caching;
-    bool set_extent;
     int  io_strategy;
     size_t compress_threshold;
     unsigned int zip_level;
@@ -72,7 +71,6 @@ usage(char *progname)
   [-r]         disable chunk caching for raw data (default: enable)\n\
   [-s]         one process creates followed by all processes open file (default: off)\n\
   [-p]         use MPI-IO to open input files (default: POSIX)\n\
-  [-x]         disable calls to H5Dset_extent (default: enable)\n\
   [-t num]     use parallel I/O strategy 1 or 2 (default: 2)\n\
   [-m size]    disable compression for datasets of size smaller than 'size' MiB\n\
   [-k name]    name of dataset used to generate partitioning keys\n\
@@ -83,7 +81,7 @@ usage(char *progname)
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     std::cout<<"Usage: "<<progname<<
-    " [-h|-q|-d|-r|-s|-p|-x] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]\n"
+    " [-h|-q|-d|-r|-s|-p] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]\n"
     << USAGE << std::endl;
 }
 
@@ -94,7 +92,6 @@ Options::Options(int argc, char **argv) :
                  posix_open(true),
                  in_memory_io(true),
                  chunk_caching(true),
-                 set_extent(true),
                  io_strategy(2),
                  compress_threshold(0),
                  zip_level(6),
@@ -107,7 +104,7 @@ Options::Options(int argc, char **argv) :
     std::string line;
     std::ifstream fd;
 
-    while ((opt = getopt(argc, argv, "hqspdrxt:m:k:i:o:z:b:")) != -1) {
+    while ((opt = getopt(argc, argv, "hqspdrt:m:k:i:o:z:b:")) != -1) {
         switch (opt) {
             case 's':
                 one_process_create = true;
@@ -120,9 +117,6 @@ Options::Options(int argc, char **argv) :
                 break;
             case 'r':
                 chunk_caching = false;
-                break;
-            case 'x':
-                set_extent = false;
                 break;
             case 't':
                 io_strategy = atoi(optarg);
@@ -191,13 +185,14 @@ Options::Options(int argc, char **argv) :
     free(in_filename);
 }
 
+/*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
     int err=0, nprocs, rank;
     std::vector<std::string> myinputs;
     std::size_t offset, length, remainder;
 #if defined PROFILE && PROFILE
-    double ts, step_time[8], max_time[14];
+    double ts, step_time[8], max_time[10];
 #endif
 
     MPI_Init(&argc, &argv);
@@ -248,7 +243,6 @@ int main(int argc, char **argv)
                         opt.posix_open,
                         opt.in_memory_io,
                         opt.chunk_caching,
-                        opt.set_extent,
                         opt.compress_threshold,
                         opt.one_process_create,
                         opt.zip_level,
@@ -307,14 +301,20 @@ int main(int argc, char **argv)
 
         if (opt.part_key_base.compare("") != 0) {
             SET_TIMER(ts)
-            /* write the partition keys whose data are still in the buffers */
-            err = concat.write_partition_key_datasets();
+            /* write the partition keys */
+            err = concat.write_partition_key_dataset();
             if (err < 0) {
-                std::cout<<"write_partition_key_datasets() failed."<<std::endl;
+                std::cout<<"write_partition_key_dataset() failed."<<std::endl;
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
             PRN_TIMER(step_time[3], "Writ partition key datasets")
+        }
+
+        err = concat.close_input_files();
+        if (err < 0) {
+            std::cout<<"close_input_files() failed."<<std::endl;
+            goto prog_exit;
         }
 
         /* Concatenate 2D datasets */
@@ -340,10 +340,10 @@ int main(int argc, char **argv)
 
         if (opt.part_key_base.compare("") != 0) {
             SET_TIMER(ts)
-            /* write the partition keys whose data are still in the buffers */
-            err = concat.write_partition_key_datasets();
+            /* write the partition keys */
+            err = concat.write_partition_key_dataset();
             if (err < 0) {
-                std::cout<<"write_partition_key_datasets() failed."<<std::endl;
+                std::cout<<"write_partition_key_dataset() failed."<<std::endl;
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
@@ -382,7 +382,7 @@ int main(int argc, char **argv)
     MPI_Reduce(step_time, max_time, 8, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     for (int i=0; i<8; i++) step_time[i] = max_time[i];
 
-    double local_time[14];
+    double local_time[10];
     local_time[0]  = concat.c_1d_2d;
     local_time[1]  = concat.o_1d;
     local_time[2]  = concat.r_1d;
@@ -393,8 +393,7 @@ int main(int argc, char **argv)
     local_time[7]  = concat.o_f;
     local_time[8]  = concat.close_in_dsets;
     local_time[9]  = concat.close_out_dsets;
-    local_time[10] = concat.t_set_extent;
-    MPI_Reduce(local_time, max_time, 11, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(local_time, max_time, 10, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     concat.c_1d_2d         = max_time[0];
     concat.o_1d            = max_time[1];
     concat.r_1d            = max_time[2];
@@ -405,7 +404,6 @@ int main(int argc, char **argv)
     concat.o_f             = max_time[7];
     concat.close_in_dsets  = max_time[8];
     concat.close_out_dsets = max_time[9];
-    concat.t_set_extent    = max_time[10];
 
     if (!opt.quiet && rank == 0) { /* only rank 0 reports timings */
         printf("-------------------------------------------------------------\n");
@@ -417,15 +415,13 @@ int main(int argc, char **argv)
         printf("POSIX In-memory I/O:                     %s\n",opt.in_memory_io?"ON":"OFF");
         printf("1-process-create-followed-by-all-open:   %s\n",opt.one_process_create?"ON":"OFF");
         printf("Chunk caching for raw data:              %s\n",opt.chunk_caching?"ON":"OFF");
-        printf("Enable calls to H5Dset_extent:           %s\n",opt.set_extent?"ON":"OFF");
         printf("GZIP level:                              %d\n",opt.zip_level);
         if (opt.compress_threshold > 0)
             printf("Disable compress for datasets of size < %4zd MiB\n",opt.compress_threshold);
         printf("Internal I/O buffer size:                %.1f MiB\n",(float)concat.inq_io_buffer_size()/1048576.0);
         if (opt.part_key_base.compare("") != 0) {
             printf("Dataset used to produce partition key:   %s\n",opt.part_key_base.c_str());
-            printf("Name of partition key datasets:          %s.key.seq, %s.key.cnt\n",
-                   opt.part_key_base.c_str(), opt.part_key_base.c_str());
+            printf("Name of partition key datasets:          %s.seq\n", opt.part_key_base.c_str());
         }
         printf("-------------------------------------------------------------\n");
         printf("Number of groups:                    %8zd\n", concat.inq_original_num_groups());
@@ -451,7 +447,6 @@ int main(int argc, char **argv)
         printf("H5Dwrite  for 2D datasets:           %9.4f\n", concat.w_2d);
         printf("H5Dclose  for  input datasets:       %9.4f\n", concat.close_in_dsets);
         printf("H5Dclose  for output datasets:       %9.4f\n", concat.close_out_dsets);
-        printf("H5Dset_extent for key.cnt datasets:  %9.4f\n", concat.t_set_extent);
         printf("-------------------------------------------------------------\n");
         printf("Read metadata from input files:      %9.4f\n", step_time[0]);
         printf("Create output file + datasets:       %9.4f\n", step_time[1]);

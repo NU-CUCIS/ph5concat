@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+using namespace std;
 
 #include <hdf5.h>
 #include <mpi.h>
@@ -54,10 +55,7 @@ struct DSInfo_t {
 
     bool          is_key_base;   /* is this dataset partitioning key base ? */
     bool          is_key_seq;    /* is this dataset a partitioning key seq ? */
-    bool          is_key_cnt;    /* is this dataset a partitioning key cnt ? */
-    hsize_t       cnt_len;       /* true size of key.cnt dataset */
     hsize_t       seq_len;       /* number of unique IDs in key.seq dataset */
-    long long    *cnt_buf;       /* key.cnt buffer */
     long long    *seq_buf;       /* key.seq buffer */
 
     std::vector<hid_t>   in_dset_ids;/* dataset IDs of opened input files */
@@ -78,11 +76,13 @@ struct GrpInfo {
                                * the same group share the 1st dimension size)
                                */
     DSInfo_t    *dsets;       /* dataset objects in this group */
-    DSInfo_t    *key_base;    /* point to dataset used to generate keys */
+    DSInfo_t    *key_base;    /* point to dataset used to generate key */
     DSInfo_t    *seq_dset;    /* point to key.seq */
-    DSInfo_t    *cnt_dset;    /* point to key.cnt */
 };
 typedef struct GrpInfo GrpInfo;
+
+/* lookup hash table */
+typedef unordered_map<int, int64_t> table;
 
 /*
  * Main class.
@@ -92,9 +92,8 @@ public:
     Concatenator(int nprocs, int rank, MPI_Comm comm, MPI_Info info,
                  size_t num_input_files, std::string const& output,
                  bool posix_open, bool in_memory_io, bool chunk_caching,
-                 bool set_extent, size_t compress_threshold,
-                 bool one_process_create, unsigned int zip_level,
-                 size_t buffer_size, int io_strategy,
+                 size_t compress_threshold, bool one_process_create,
+                 unsigned int zip_level, size_t buffer_size, int io_strategy,
                  std::string const& part_key_base);
     ~Concatenator();
     int construct_metadata(std::vector<std::string> const &inputs);
@@ -109,8 +108,8 @@ public:
     int concat_small_datasets(std::vector<std::string> const &inputs);
     int concat_large_datasets(std::vector<std::string> const &inputs);
 
-    /* finalize and write partitioning key datasets to file */
-    int write_partition_key_datasets();
+    /* finalize and write partitioning key dataset to file */
+    int write_partition_key_dataset();
 
     int close_output_file();
     int close_input_files();
@@ -136,7 +135,6 @@ public:
     double o_f;
     double close_in_dsets;
     double close_out_dsets;
-    double t_set_extent;
     int num_allreduce;   /* number of calls to MPI_Allreduce */
     int num_exscan;      /* number of calls to MPI_Exscan */
 
@@ -152,19 +150,24 @@ private:
     bool     posix_open;    /* use POSIX I/O or MPI-IO to open input files */
     bool     in_memory_io;  /* enable HDF5 in-memory I/O to read input files */
     bool     chunk_caching; /* enable HDF5 caching for raw data chunks */
-    bool     set_extent;         /* whether to call H5Dset_extent */
     size_t   compress_threshold; /* whether to compress small datasets */
     bool     one_process_create; /* enable one-process-create-then-all-open */
-    bool     add_partition_keys; /* whether to create partition keys */
+    bool     add_partition_key;  /* whether to create partition key */
     int      io_strategy;        /* 1 or 2 (parallel I/O strategy) */
 
     std::string output_file_name;
-    std::string part_key_base; /* dataset used to create partition keys */
+    std::string part_key_base; /* dataset used to create partition key */
 
     size_t   num_groups;          /* number of groups */
     size_t   original_num_groups; /* some groups may contain zero-sized data */
     size_t   num_groups_have_key; /* number of groups contain key base */
     GrpInfo *groups;              /* array of group objects */
+
+    int      spill_grp_no;  /* spill's array index in group[] */
+    table   *lookup_table;  /* [num_input_files] hash tables, one for each file,
+                               served as lookup tables built based on the user
+                               indicated partition key base dataset in group
+                               /spill */
 
     size_t  total_num_datasets; /* total number of non-zero datasets */
     size_t  original_total_num_datasets;
@@ -198,13 +201,13 @@ private:
     /* create an HDF5 dataset object */
     int create_dataset(hid_t group_id, DSInfo_t &dset_info, bool toFill);
 
-    /* Create partitioning key datasets and add to their groups */
-    int create_partition_keys(GrpInfo &grp);
+    /* Create partitioning key dataset and add to its group */
+    int create_partition_key(GrpInfo &grp);
 
-    /* Use partition base dataset to generate the contents of partition key
-     * datasets. Write base dataset to file, but not write the key datasets.
+    /* Use partition base dataset /spill/key_base to generate the lookup table
+     * which will be used to generate the partition key dataset in each group.
      */
-    int generate_partition_keys(GrpInfo &grp, DSInfo_t &base);
+    int generate_partition_key(GrpInfo &grp);
 
     /* Read function for all datasets in strategy 2.
      * concat_datasets() calls this function in file_partition.cpp. */

@@ -34,8 +34,11 @@ int Concatenator::concat_small_datasets(std::vector<std::string> const &inputs)
         }
     }
 
-    /* Close all the input files */
-    close_input_files();
+    /* Delay close the input files until after writing partition datasets,
+     * as the partition base and key datasets are still opened, to be read
+     * from and written to files.
+     * close_input_files();
+     */
 
 fn_exit:
     return err_exit;

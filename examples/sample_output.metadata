@@ -1,4 +1,4 @@
-HDF5 "out.h5" {
+HDF5 "sample_output.h5" {
 GROUP "/" {
    GROUP "neutrino" {
       DATASET "evt" {
@@ -19,25 +19,7 @@ GROUP "/" {
             H5D_ALLOC_TIME_EARLY
          }
       }
-      DATASET "evt.key.cnt" {
-         DATATYPE  H5T_STD_I64LE
-         DATASPACE  SIMPLE { ( 0, 1 ) / ( 0, 1 ) }
-         STORAGE_LAYOUT {
-            COMPACT
-            SIZE 0
-         }
-         FILTERS {
-            NONE
-         }
-         FILLVALUE {
-            FILL_TIME H5D_FILL_TIME_IFSET
-            VALUE  H5D_FILL_VALUE_DEFAULT
-         }
-         ALLOCATION_TIME {
-            H5D_ALLOC_TIME_EARLY
-         }
-      }
-      DATASET "evt.key.seq" {
+      DATASET "evt.seq" {
          DATATYPE  H5T_STD_I64LE
          DATASPACE  SIMPLE { ( 0, 1 ) / ( 0, 1 ) }
          STORAGE_LAYOUT {
@@ -149,10 +131,10 @@ GROUP "/" {
    GROUP "rec.me.trkkalman" {
       DATASET "evt" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 4597 (2.196:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 6630 (2.003:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -165,36 +147,18 @@ GROUP "/" {
             H5D_ALLOC_TIME_EARLY
          }
       }
-      DATASET "evt.key.cnt" {
+      DATASET "evt.seq" {
          DATATYPE  H5T_STD_I64LE
-         DATASPACE  SIMPLE { ( 2083, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 540 (30.859:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 4613 (5.758:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
          }
          FILLVALUE {
-            FILL_TIME H5D_FILL_TIME_IFSET
-            VALUE  H5D_FILL_VALUE_DEFAULT
-         }
-         ALLOCATION_TIME {
-            H5D_ALLOC_TIME_EARLY
-         }
-      }
-      DATASET "evt.key.seq" {
-         DATATYPE  H5T_STD_I64LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
-         STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 3514 (5.746:1 COMPRESSION)
-         }
-         FILTERS {
-            COMPRESSION DEFLATE { LEVEL 6 }
-         }
-         FILLVALUE {
-            FILL_TIME H5D_FILL_TIME_IFSET
+            FILL_TIME H5D_FILL_TIME_NEVER
             VALUE  H5D_FILL_VALUE_DEFAULT
          }
          ALLOCATION_TIME {
@@ -203,10 +167,10 @@ GROUP "/" {
       }
       DATASET "meanpos.x" {
          DATATYPE  H5T_IEEE_F32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 6867 (1.470:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 10059 (1.320:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -221,10 +185,10 @@ GROUP "/" {
       }
       DATASET "meanpos.y" {
          DATATYPE  H5T_IEEE_F32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 6896 (1.464:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 10101 (1.315:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -239,10 +203,10 @@ GROUP "/" {
       }
       DATASET "meanpos.z" {
          DATATYPE  H5T_IEEE_F32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 7832 (1.289:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 11564 (1.148:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -257,10 +221,10 @@ GROUP "/" {
       }
       DATASET "run" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 38 (265.684:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 41 (323.902:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -275,10 +239,10 @@ GROUP "/" {
       }
       DATASET "subevt" {
          DATATYPE  H5T_STD_U16LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 1154 (4.374:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 1713 (3.876:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -293,10 +257,10 @@ GROUP "/" {
       }
       DATASET "subrun" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 2524, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 3320, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 2524, 1 )
-            SIZE 48 (210.333:1 COMPRESSION)
+            CHUNKED ( 3320, 1 )
+            SIZE 47 (282.553:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -313,10 +277,10 @@ GROUP "/" {
    GROUP "rec.training.cvnmaps" {
       DATASET "cvnmap" {
          DATATYPE  H5T_STD_U8LE
-         DATASPACE  SIMPLE { ( 21057, 16 ) / ( H5S_UNLIMITED, 16 ) }
+         DATASPACE  SIMPLE { ( 28127, 16 ) / ( H5S_UNLIMITED, 16 ) }
          STORAGE_LAYOUT {
             CHUNKED ( 128, 16 )
-            SIZE 7733 (43.568:1 COMPRESSION)
+            SIZE 11303 (39.815:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -331,10 +295,10 @@ GROUP "/" {
       }
       DATASET "evt" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 14191 (5.935:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 17418 (6.459:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -347,36 +311,18 @@ GROUP "/" {
             H5D_ALLOC_TIME_EARLY
          }
       }
-      DATASET "evt.key.cnt" {
+      DATASET "evt.seq" {
          DATATYPE  H5T_STD_I64LE
-         DATASPACE  SIMPLE { ( 6306, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 4439 (11.365:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 16301 (13.804:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
          }
          FILLVALUE {
-            FILL_TIME H5D_FILL_TIME_IFSET
-            VALUE  H5D_FILL_VALUE_DEFAULT
-         }
-         ALLOCATION_TIME {
-            H5D_ALLOC_TIME_EARLY
-         }
-      }
-      DATASET "evt.key.seq" {
-         DATATYPE  H5T_STD_I64LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
-         STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 13095 (12.864:1 COMPRESSION)
-         }
-         FILTERS {
-            COMPRESSION DEFLATE { LEVEL 6 }
-         }
-         FILLVALUE {
-            FILL_TIME H5D_FILL_TIME_IFSET
+            FILL_TIME H5D_FILL_TIME_NEVER
             VALUE  H5D_FILL_VALUE_DEFAULT
          }
          ALLOCATION_TIME {
@@ -385,10 +331,10 @@ GROUP "/" {
       }
       DATASET "hitfracx" {
          DATATYPE  H5T_IEEE_F32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 31259 (2.695:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 41384 (2.719:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -403,10 +349,10 @@ GROUP "/" {
       }
       DATASET "hitfracy" {
          DATATYPE  H5T_IEEE_F32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 31222 (2.698:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 41357 (2.720:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -421,10 +367,10 @@ GROUP "/" {
       }
       DATASET "ncells" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 108 (779.889:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 136 (827.265:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -439,10 +385,10 @@ GROUP "/" {
       }
       DATASET "run" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 110 (765.709:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 137 (821.226:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -457,10 +403,10 @@ GROUP "/" {
       }
       DATASET "subevt" {
          DATATYPE  H5T_STD_U16LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 6792 (6.201:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 9067 (6.204:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }
@@ -475,10 +421,84 @@ GROUP "/" {
       }
       DATASET "subrun" {
          DATATYPE  H5T_STD_U32LE
-         DATASPACE  SIMPLE { ( 21057, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         DATASPACE  SIMPLE { ( 28127, 1 ) / ( H5S_UNLIMITED, 1 ) }
          STORAGE_LAYOUT {
-            CHUNKED ( 21057, 1 )
-            SIZE 116 (726.103:1 COMPRESSION)
+            CHUNKED ( 28127, 1 )
+            SIZE 144 (781.306:1 COMPRESSION)
+         }
+         FILTERS {
+            COMPRESSION DEFLATE { LEVEL 6 }
+         }
+         FILLVALUE {
+            FILL_TIME H5D_FILL_TIME_NEVER
+            VALUE  H5D_FILL_VALUE_DEFAULT
+         }
+         ALLOCATION_TIME {
+            H5D_ALLOC_TIME_EARLY
+         }
+      }
+   }
+   GROUP "spill" {
+      DATASET "evt" {
+         DATATYPE  H5T_STD_U32LE
+         DATASPACE  SIMPLE { ( 9810, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         STORAGE_LAYOUT {
+            CHUNKED ( 9810, 1 )
+            SIZE 18136 (2.164:1 COMPRESSION)
+         }
+         FILTERS {
+            COMPRESSION DEFLATE { LEVEL 6 }
+         }
+         FILLVALUE {
+            FILL_TIME H5D_FILL_TIME_NEVER
+            VALUE  H5D_FILL_VALUE_DEFAULT
+         }
+         ALLOCATION_TIME {
+            H5D_ALLOC_TIME_EARLY
+         }
+      }
+      DATASET "evt.seq" {
+         DATATYPE  H5T_STD_I64LE
+         DATASPACE  SIMPLE { ( 9810, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         STORAGE_LAYOUT {
+            CHUNKED ( 9810, 1 )
+            SIZE 15063 (5.210:1 COMPRESSION)
+         }
+         FILTERS {
+            COMPRESSION DEFLATE { LEVEL 6 }
+         }
+         FILLVALUE {
+            FILL_TIME H5D_FILL_TIME_NEVER
+            VALUE  H5D_FILL_VALUE_DEFAULT
+         }
+         ALLOCATION_TIME {
+            H5D_ALLOC_TIME_EARLY
+         }
+      }
+      DATASET "run" {
+         DATATYPE  H5T_STD_U32LE
+         DATASPACE  SIMPLE { ( 9810, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         STORAGE_LAYOUT {
+            CHUNKED ( 9810, 1 )
+            SIZE 66 (594.545:1 COMPRESSION)
+         }
+         FILTERS {
+            COMPRESSION DEFLATE { LEVEL 6 }
+         }
+         FILLVALUE {
+            FILL_TIME H5D_FILL_TIME_NEVER
+            VALUE  H5D_FILL_VALUE_DEFAULT
+         }
+         ALLOCATION_TIME {
+            H5D_ALLOC_TIME_EARLY
+         }
+      }
+      DATASET "subrun" {
+         DATATYPE  H5T_STD_U32LE
+         DATASPACE  SIMPLE { ( 9810, 1 ) / ( H5S_UNLIMITED, 1 ) }
+         STORAGE_LAYOUT {
+            CHUNKED ( 9810, 1 )
+            SIZE 72 (545.000:1 COMPRESSION)
          }
          FILTERS {
             COMPRESSION DEFLATE { LEVEL 6 }

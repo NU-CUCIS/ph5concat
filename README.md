@@ -5,6 +5,7 @@ across multiple files into a single file by appending individual datasets one
 after another.
 
 ## Input HDF5 Files
+* Each file contains data from a single subrun.
 * Each file contains multiple groups, each representing a "relational database
   table".
 * Each group contains multiple datasets. The number of datasets in a group can
@@ -46,30 +47,38 @@ after another.
 ## Command to Run
 * Command-line options are:
   ```
-  mpiexec -n <np> ./ph5_concat [-h|-q|-d|-r|-s|-p|-x] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]
+  mpiexec -n <np> ./ph5_concat [-h|-q|-d|-r|-s|-p] [-t num] [-m size] [-k base_name] [-z level] [-b size] [-o outfile] [-i infile]
 
-  [-h]         print this command usage message
-  [-q]         enable quiet mode (default: disable)
-  [-d]         disable in-memory I/O (default: enable)
-  [-r]         disable chunk caching for raw data (default: enable)
-  [-s]         one process creates followed by all processes open file (default: off)
-  [-p]         use MPI-IO to open input files (default: POSIX)
-  [-x]         disable calls to H5Dset_extent (default: enable)
-  [-t num]     use parallel I/O strategy 1 or 2 (default: 2)
-  [-m size]    disable compression for datasets of size smaller than 'size' MiB
-  [-k name]    name of dataset used to generate partitioning keys
-  [-z level]   GZIP compression level (default: 6)
-  [-b size]    I/O buffer size per process (default: 128 MiB)
-  [-o outfile] output file name (default: out.h5)
-  [-i infile]  input file containing HEP data files (default: list.txt)
+  [-h]           print this command usage message
+  [-q]           enable quiet mode (default: disable)
+  [-d]           disable in-memory I/O (default: enable)
+  [-r]           disable chunk caching for raw data (default: enable)
+  [-s]           one process creates followed by all processes open file (default: off)
+  [-p]           use MPI-IO to open input files (default: POSIX)
+  [-t num]       use parallel I/O strategy 1 or 2 (default: 2)
+  [-m size]      disable compression for datasets of size smaller than 'size' MiB
+  [-k base_name] dataset name in group /spill to generate partitioning keys
+  [-z level]     GZIP compression level (default: 6)
+  [-b size]      I/O buffer size per process (default: 128 MiB)
+  [-o outfile]   output file name (default: out.h5)
+  [-i infile]    input file containing HEP data files (default: list.txt)
   ```
   + `<np>`: Number of MPI processes.
-  + `partitioning keys`: when command-line option '-k' is used, two new
-    datasets will be created to be used for the purpose of partitioning the
-    datasets for parallel read operations. The two key datasets will have file
-    name extensions '.key.seq' and '.key.cnt' appended to the dataset name
-    provided in the option '-k'. When option '-k' is not used, the two
-    partitioning key datasets will not be created.
+  + `partitioning keys`: when command-line option '-k' is used, a new dataset
+    will be created in each group in the output file, which can be used for
+    data partitioning in parallel read operations. The new dataset, referred
+    as the partition key dataset, is named 'base_name.seq' where 'base_name' is
+    the dataset name provided in the command-line option '-k'. Contents of the
+    partition key dataset are generated based on the dataset 'base_name' in
+    group '/spill'. This base dataset must contain a list of unique integer
+    values, stored in an increasing order, not necessarily incremented by one.
+    An example is the dataset '/spill/evt'. The data partitioning strategy for
+    parallel reads is to assign the dataset elements with the same 3-tuple of
+    'run', 'subrun', and the base dataset to the same MPI process. Thus the
+    partition key dataset created in the output file stores a list of unique
+    IDs corresponding to the unique 3-tuples. The unique IDs are consistent
+    among datasets across all groups. When option '-k' is not used, the
+    partition key dataset will not be created.
   + I/O buffer size: when command-line option '-b' is used with value 0, this
     is equivalent to set the size to unlimited, i.e. the concatenator will
     allocate a buffer large enough to write each dataset in a single call to
@@ -88,10 +97,10 @@ after another.
 
 ## Sample input and output files
 * There are four sample input files provided in folder `examples`.
-  + examples/sample_input_1.h5
-  + examples/sample_input_2.h5
-  + examples/sample_input_3.h5
-  + examples/sample_input_4.h5
+  + examples/sample_r11981_s06.h5
+  + examples/sample_r11981_s07.h5
+  + examples/sample_r11981_s08.h5
+  + examples/sample_r11981_s09.h5
 * Sample run commands
   ```
   mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
@@ -108,7 +117,7 @@ after another.
 
 ## An example timing output from a run on Cori using 128 MPI processes.
   ```
-  % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt -x
+  % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt
 
   Number of input HDF5 files: 128
   Input directory name: /global/cscratch1/sd/wkliao/FS_1M_8
@@ -130,11 +139,10 @@ after another.
   POSIX In-memory I/O:                     ON
   1-process-create-followed-by-all-open:   OFF
   Chunk caching for raw data:              ON
-  Enable calls to H5Dset_extent:           OFF
   GZIP level:                              6
   Internal I/O buffer size:                512.0 MiB
   Dataset used to produce partition key:   evt
-  Name of partition key datasets:          evt.key.seq, evt.key.cnt
+  Name of partition key datasets:          evt.seq
   -------------------------------------------------------------
   Number of groups:                         999
   Number of non-zero-sized groups:          108
@@ -156,11 +164,11 @@ after another.
   -------------------------------------------------------------
   Read metadata from input files:         1.2782
   Create output file + datasets:         25.7466
-  Small datasets total:                 158.8102
+  Concatenate small datasets:           158.8102
   Write to partition key datasets:       14.0372
-  Large datasets total:                 114.4520
-  Close  input files total:               0.0124
-  Close output files total:               0.4799
+  Concatenate large datasets:           114.4520
+  Close  input files:                     0.0124
+  Close output files:                     0.4799
   End-to-end:                           314.8095
   ```
 

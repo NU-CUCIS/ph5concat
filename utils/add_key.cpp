@@ -85,13 +85,13 @@ static
 table build_lookup_table(hsize_t       len,
                          unsigned int *run,
                          unsigned int *subrun,
-                         unsigned int *evt)
+                         unsigned int *base)
 {
     hsize_t i;
     table ret;
 
     for (i=0; i<len; i++)
-        ret[key(run[i], subrun[i], evt[i])] = i;
+        ret[key(run[i], subrun[i], base[i])] = i;
 
     return ret;
 }
@@ -127,26 +127,26 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
     return 0;
 }
 
-/*----< add_evtseq() >------------------------------------------------------*/
+/*----< add_seq() >---------------------------------------------------------*/
 /* call back function used in H5Ovisit() */
 static
-herr_t add_evtseq(bool        dry_run,
-                  hid_t       file_id,
-                  const char *grp_name,
-                  const char *key_name,
-                  table       lookup_table,
-                  size_t     *num_nonzero_groups,
-                  size_t     *max_len,    /* max seq size */
-                  size_t     *min_len,    /* min seq size */
-                  size_t     *avg_len,    /* avg seq size */
-                  double     *timing)
+herr_t add_seq(bool        dry_run,
+               hid_t       file_id,
+               const char *grp_name,
+               const char *base_name,
+               table       lookup_table,
+               size_t     *num_nonzero_groups,
+               size_t     *max_len,    /* max seq size */
+               size_t     *min_len,    /* min seq size */
+               size_t     *avg_len,    /* avg seq size */
+               double     *timing)
 {
     int ndims;
     size_t i;
     herr_t err;
-    hid_t grp_id, run_id, srun_id, evt_id, dcpl_id, space_id, seq_id;
+    hid_t grp_id, run_id, srun_id, base_id, dcpl_id, space_id, seq_id;
     hsize_t dset_dims[2], maxdims[2];
-    unsigned int *run_buf, *srun_buf, *evt_buf;
+    unsigned int *run_buf, *srun_buf, *base_buf;
     int64_t *seq_buf;
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
@@ -158,24 +158,24 @@ herr_t add_evtseq(bool        dry_run,
     grp_id = H5Gopen(file_id, grp_name, H5P_DEFAULT);
     if (grp_id < 0) CALLBACK_ERROR("H5Gopen", grp_name)
 
-    /* open dataset evt in this group */
-    evt_id = H5Dopen(grp_id, "evt", H5P_DEFAULT);
-    if (evt_id < 0) CALLBACK_ERROR("H5Dopen", "evt")
+    /* open base dataset in this group */
+    base_id = H5Dopen(grp_id, base_name, H5P_DEFAULT);
+    if (base_id < 0) CALLBACK_ERROR("H5Dopen", base_name)
 
-    /* Get dimension sizes of dataset evt */
-    space_id = H5Dget_space(evt_id);
-    if (space_id < 0) CALLBACK_ERROR("H5Dget_space", "evt")
+    /* Get dimension sizes of base dataset */
+    space_id = H5Dget_space(base_id);
+    if (space_id < 0) CALLBACK_ERROR("H5Dget_space", base_name)
     ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
-    if (ndims != 2) CALLBACK_ERROR("H5Sget_simple_extent_dims", "evt")
+    if (ndims != 2) CALLBACK_ERROR("H5Sget_simple_extent_dims", base_name)
 
-    /* Get create property of dataset evt when it was created */
-    dcpl_id = H5Dget_create_plist(evt_id);
-    if (dcpl_id < 0) CALLBACK_ERROR("H5Dget_create_plist", "evt")
+    /* Get create property of base dataset when it was created */
+    dcpl_id = H5Dget_create_plist(base_id);
+    if (dcpl_id < 0) CALLBACK_ERROR("H5Dget_create_plist", base_name)
 
-    /* if evt is zero-sized, just create the new evtseq */
+    /* if base dataset is zero-sized, just create dataset key_name */
     if (dset_dims[0] == 0) {
-        err = H5Dclose(evt_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", "evt")
+        err = H5Dclose(base_id);
+        if (err < 0) CALLBACK_ERROR("H5Dclose", base_name)
         goto seq_create;
     }
 
@@ -193,17 +193,17 @@ herr_t add_evtseq(bool        dry_run,
         *avg_len += dset_dims[0];
     }
 
-    /* allocate buffers for run, subrun, evt */
+    /* allocate buffers for run, subrun, base */
     run_buf  = (unsigned int*) malloc(dset_dims[0] * 3 * sizeof(unsigned int));
     srun_buf = run_buf  + dset_dims[0];
-    evt_buf  = srun_buf + dset_dims[0];
+    base_buf = srun_buf + dset_dims[0];
 
-    /* read the entire dataset evt */
-    err = H5Dread(evt_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  evt_buf);
-    if (err < 0) CALLBACK_ERROR("H5Dread", "evt")
+    /* read the entire base dataset */
+    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  base_buf);
+    if (err < 0) CALLBACK_ERROR("H5Dread", base_name)
 
-    if ((err = H5Dclose(evt_id))  < 0) CALLBACK_ERROR("H5Dclose", "evt")
+    if ((err = H5Dclose(base_id))  < 0) CALLBACK_ERROR("H5Dclose", base_name)
 
     /* open dataset run in this group */
     run_id = H5Dopen(grp_id, "run", H5P_DEFAULT);
@@ -229,46 +229,48 @@ herr_t add_evtseq(bool        dry_run,
 
     GET_TIMER(ts, te, timing[0])
 
-    /* allocate buffer for evtseq */
+    /* allocate buffer for dataset seq */
     seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
 
-    /* table lookup the seq values */
+    /* table look up the seq values */
     for (i=0; i<dset_dims[0]; i++)
-        seq_buf[i] = lookup_table[key(run_buf[i], srun_buf[i], evt_buf[i])];
+        seq_buf[i] = lookup_table[key(run_buf[i], srun_buf[i], base_buf[i])];
 
     free(run_buf);
 
     GET_TIMER(ts, te, timing[1])
 
-    /* create new dataset evtseq */
 seq_create:
     if (!dry_run) {
-        /* create a new dataset */
-        seq_id = H5Dcreate2(grp_id, "evtseq", H5T_STD_I64LE, space_id,
-                            H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", "evtseq")
+        char key_name[1024];
+        sprintf(key_name, "%s.seq", base_name);
 
-        /* write evtseq (entire dataset) */
+        /* create a new dataset */
+        seq_id = H5Dcreate2(grp_id, key_name, H5T_STD_I64LE, space_id,
+                            H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", key_name)
+
+        /* write seq (entire dataset) */
         if (dset_dims[0] > 0) {
             err = H5Dwrite(seq_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL,
                            H5P_DEFAULT, seq_buf);
-            if (err < 0) CALLBACK_ERROR("H5Dwrite", "evyseq")
+            if (err < 0) CALLBACK_ERROR("H5Dwrite", key_name)
         }
 
         GET_TIMER(ts, te, timing[2])
 
         /* close dataset */
         err = H5Dclose(seq_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", "evyseq")
+        if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
     }
     if (dset_dims[0] > 0) free(seq_buf);
 
     /* close create property */
     err = H5Pclose(dcpl_id);
-    if (err < 0) RETURN_ERROR("H5Pclose", "evyseq")
+    if (err < 0) RETURN_ERROR("H5Pclose", base_name)
     /* close space */
     err = H5Sclose(space_id);
-    if (err < 0) CALLBACK_ERROR("H5Sclose", "evyseq")
+    if (err < 0) CALLBACK_ERROR("H5Sclose", base_name)
     /* close group */
     err = H5Gclose(grp_id);
     if (err < 0) CALLBACK_ERROR("H5Gclose", grp_name)
@@ -359,27 +361,32 @@ static void
 usage(char *progname)
 {
 #define USAGE   "\
-  [-h]        print this command usage message\n\
-  [-v]        verbose mode (default: off)\n\
-  [-n]        dry run without creating key datasets (default: disabled)\n\
-  file _name  HDF5 file name (required)\n\n\
-  This utility program adds a new dataset named evtseq to be used for\n\
-  parallel read data partitioning to an input HDF5 file. The contents of\n\
-  evtseq are generated based on 3 datasets run, subrun, and evt in group\n\
-  spill. 3-tuple (run[i], subrun[i], evt[i]) serves a unique identiifier\n\
-  such that data elements of all groups with the same 3-tuple are assigned\n\
-  to the same MPI process when the file is read in parallel by multiple\n\
-  processes.\n\
-  Requirements for the HDF5 file:\n\
-    1. contains multiple groups only at root level\n\
+  [-h]          print this command usage message\n\
+  [-v]          verbose mode (default: off)\n\
+  [-n]          dry run without creating key datasets (default: disabled)\n\
+  -k base_name  dataset name in group /spill to generate partitioning keys (required)\n\
+  file_name     input/output HDF5 file name (required)\n\n\
+  This utility program adds a new dataset in each group of the input file.\n\
+  The new dataset, referred as the partition key dataset and to be named as\n\
+  'base_name.seq', can be used for data partitioning in parallel read\n\
+  operations. Its contents are generated based on the dataset 'base_name' in\n\
+  group '/spill'. This base dataset must contain a list of unique integer\n\
+  values, stored in an increasing order. An example is the dataset\n\
+  '/spill/evt'. The data partitioning strategy for parallel reads is to\n\
+  assign the dataset elements with the same 3-tuple of 'run', 'subrun', and\n\
+  the base dataset to the same MPI process. Thus the partition key dataset\n\
+  created in the output file stores a list of unique IDs corresponding to\n\
+  the unique 3-tuples. The unique IDs are consistent among datasets across\n\
+  all groups. Requirements for the HDF5 file:\n\
+    1. contains multiple groups at root level\n\
     2. each group may contain multiple 2D datasets\n\
     3. all datasets in the same group share the 1st dimension size\n\
-    4. each group must contain datasets run, subrun, and evt\n\
+    4. each group must contain datasets run, subrun, and 'base_name'\n\
     5. the second dimension size of the 3 daatsets must be 1\n\
     6. data type of the 3 datasets msut be H5T_STD_U32LE\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v] file_name\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v] -k base_name file_name\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
@@ -387,11 +394,11 @@ int main(int argc, char **argv)
 {
     bool dry_run=false;
     int c, err_exit=0, ndims;
-    char msg[1024], *infile=NULL;
+    char msg[1024], *infile=NULL, dset_name[1024], *part_key_base=NULL;
     herr_t err;
-    hid_t file_id=-1, fapl_id=-1, run_id, srun_id, evt_id, space_id;
+    hid_t file_id=-1, fapl_id=-1, run_id, srun_id, base_id, space_id;
     hsize_t dset_dims[2], maxdims[2];
-    unsigned int *run_buf=NULL, *srun_buf, *evt_buf;
+    unsigned int *run_buf=NULL, *srun_buf, *base_buf;
     H5G_info_t grp_info;
     size_t i, num_orig_groups=0, num_nonzero_groups=0;
     size_t max_seq=0, min_seq=0, avg_seq=0;
@@ -410,17 +417,26 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvn")) != -1)
+    while ((c = getopt(argc, argv, "hvnk:")) != -1)
         switch(c) {
             case 'h': usage(argv[0]);
                       err_exit = -1;
                       goto fn_exit;
             case 'v': verbose = 1;
                       break;
+            case 'k': part_key_base = strdup(optarg);
+                      break;
             case 'n': dry_run = true;
                       break;
             default: break;
         }
+
+    if (part_key_base == NULL) { /* key base dataset name is mandatory */
+        printf("Error: partition key base dataset name is missing.\n\n");
+        usage(argv[0]);
+        err_exit = -1;
+        goto fn_exit;
+    }
 
     if (argv[optind] == NULL) { /* input file name is mandatory */
         printf("input file is missing\n");
@@ -476,28 +492,29 @@ int main(int argc, char **argv)
     printf("Collect group names               = %7.2f sec\n", timing[1]);
 #endif
 
-    /* open dataset /spill/run, /spill/subrun, /spill/evt */
+    /* open dataset /spill/run, /spill/subrun, /spill/base */
     run_id = H5Dopen(file_id, "/spill/run", H5P_DEFAULT);
     if (run_id < 0) RETURN_ERROR("H5Dopen", "/spill/run")
     srun_id = H5Dopen(file_id, "/spill/subrun", H5P_DEFAULT);
     if (srun_id < 0) RETURN_ERROR("H5Dopen", "/spill/subrun")
-    evt_id = H5Dopen(file_id, "/spill/evt", H5P_DEFAULT);
-    if (evt_id < 0) RETURN_ERROR("H5Dopen", "/spill/evt")
+    sprintf(dset_name, "/spill/%s", part_key_base);
+    base_id = H5Dopen(file_id, dset_name, H5P_DEFAULT);
+    if (base_id < 0) RETURN_ERROR("H5Dopen", dset_name)
 
-    /* collect dimension sizes of /spill/evt */
-    space_id = H5Dget_space(evt_id);
-    if (space_id < 0) RETURN_ERROR("H5Dget_space", "/spill/evt")
+    /* collect dimension sizes of /spill/base */
+    space_id = H5Dget_space(base_id);
+    if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name)
     ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
-    if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", "/spill/evt")
+    if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name)
     err = H5Sclose(space_id);
-    if (err < 0) RETURN_ERROR("H5Sclose", "/spill/evt")
+    if (err < 0) RETURN_ERROR("H5Sclose", dset_name)
 
-    /* allocate buffers for /spill/run, /spill/subrun, /spill/evt
+    /* allocate buffers for /spill/run, /spill/subrun, /spill/base
      * All 3 are of the same size, as they belong to the same group.
      */
     run_buf  = (unsigned int*) malloc(dset_dims[0] * 3 * sizeof(unsigned int));
     srun_buf = run_buf  + dset_dims[0];
-    evt_buf  = srun_buf + dset_dims[0];
+    base_buf = srun_buf + dset_dims[0];
 
     /* read the entire dataset /spill/run */
     err = H5Dread(run_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
@@ -507,23 +524,24 @@ int main(int argc, char **argv)
     err = H5Dread(srun_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                   srun_buf);
     if (err < 0) RETURN_ERROR("H5Dread", "/spill/subrun")
-    /* read the entire dataset /spill/evt */
-    err = H5Dread(evt_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  evt_buf);
-    if (err < 0) RETURN_ERROR("H5Dread", "/spill/evt")
+    /* read the entire dataset /spill/base */
+    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  base_buf);
+    if (err < 0) RETURN_ERROR("H5Dread", dset_name)
 
     /* close datasets */
     if ((err = H5Dclose(run_id))  < 0) RETURN_ERROR("H5Dclose", "/spill/run")
     if ((err = H5Dclose(srun_id)) < 0) RETURN_ERROR("H5Dclose", "/spill/subrun")
-    if ((err = H5Dclose(evt_id))  < 0) RETURN_ERROR("H5Dclose", "/spill/evt")
+    if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name)
 
     GET_TIMER(ts, te, timing[2])
 #if defined PROFILE && PROFILE
     printf("Read 'spill' 3-tuples             = %7.2f sec\n", timing[2]);
 #endif
 
-    /* build a lookup table based on datasets run, subrun, and evt */
-    lookup_table = build_lookup_table(dset_dims[0], run_buf, srun_buf, evt_buf);
+    /* build a lookup table based on datasets run, subrun, and base */
+    lookup_table = build_lookup_table(dset_dims[0], run_buf, srun_buf,
+                                      base_buf);
 
     if (run_buf != NULL) free(run_buf);
 
@@ -532,12 +550,14 @@ int main(int argc, char **argv)
     printf("Construct lookup table            = %7.2f sec\n", timing[3]);
 #endif
 
-    /* Iterate all groups and add a new dataset named evtseq to each group */
+    /* Iterate all groups and add a new dataset named 'part_key_base'.seq to
+     * each group.
+     */
     for (i=0; i<num_orig_groups; i++) {
-        err = add_evtseq(dry_run, file_id, it_op.grp_names[i], "evtseq",
-                         lookup_table, &num_nonzero_groups,
-                         &max_seq, &min_seq, &avg_seq, stime);
-        if (err < 0) RETURN_ERROR("add_evtseq", it_op.grp_names[i])
+        err = add_seq(dry_run, file_id, it_op.grp_names[i], part_key_base,
+                      lookup_table, &num_nonzero_groups, &max_seq, &min_seq,
+                      &avg_seq, stime);
+        if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[i])
     }
     if (num_nonzero_groups > 0)
         avg_seq /= num_nonzero_groups;
@@ -569,10 +589,10 @@ fn_exit:
         printf("-------------------------------------------------------\n");
         printf("Dry-run mode                      = %s\n", dry_run?"YES":"NO");
         printf("Input file name                   = %s\n", infile);
-        printf("Partition key base dataset name   = %s\n", "evt");
+        printf("Partition key base dataset name   = %s\n", part_key_base);
         printf("number of groups in the file      = %zd\n", num_orig_groups);
         printf("number of non-zero size groups    = %zd\n", num_nonzero_groups);
-        printf("Partition key name                = %sseq\n","evt");
+        printf("Partition key name                = %s.seq\n",part_key_base);
         printf("  max length among all groups     = %zd\n", max_seq);
         printf("  min length among all groups     = %zd\n", min_seq);
         printf("  avg length among all groups     = %zd\n", avg_seq);
@@ -583,9 +603,9 @@ fn_exit:
         printf("Construct lookup table            = %7.2f sec\n", timing[3]);
         printf("Add partition key datasets        = %7.2f sec\n", timing[4]);
         printf("  Read run, subrun, base datasets = %7.2f sec\n", stime[0]);
-        printf("  Key lookup                      = %7.2f sec\n", stime[1]);
-        printf("  Write key.seq                   = %7.2f sec\n", stime[2]);
-        printf("  Close key.seq                   = %7.2f sec\n", stime[3]);
+        printf("  Hash table lookup               = %7.2f sec\n", stime[1]);
+        printf("  Write partition key seq         = %7.2f sec\n", stime[2]);
+        printf("  Close partition key seq         = %7.2f sec\n", stime[3]);
         printf("File close                        = %7.2f sec\n", timing[5]);
         printf("-------------------------------------------------------\n");
         printf("End-to-end                        = %7.2f sec\n",
@@ -594,6 +614,7 @@ fn_exit:
     }
 #endif
     if (infile != NULL) free(infile);
+    if (part_key_base != NULL) free(part_key_base);
 
     return (err_exit != 0);
 }

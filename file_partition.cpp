@@ -19,309 +19,128 @@
     #define GET_TIMER(ts, t)
 #endif
 
-/*----< write_partition_key_datasets() >-------------------------------------*/
-int Concatenator::write_partition_key_datasets()
+/*----< write_partition_key_dataset() >--------------------------------------*/
+/* For each group, read the key base dataset, generate key seq dataset, write
+ * both key base and key seq datasets to the output file.
+ */
+int Concatenator::write_partition_key_dataset()
 {
     int err_exit=0;
     herr_t err;
-    hsize_t ii, jj, kk, start[2]={0,0}, count[2]={1,1};
-    hsize_t *seq_offs, *seq_lens, *cnt_offs, *cnt_lens, *extents;
+    hsize_t ii, jj, kk, start[2];
 
-    /* some groups may not contain key-base datasets */
-    cnt_lens = new hsize_t[num_groups_have_key * 5];
-    seq_lens = cnt_lens + num_groups_have_key;
-    cnt_offs = seq_lens + num_groups_have_key;
-    seq_offs = cnt_offs + num_groups_have_key;
-    extents  = seq_offs + num_groups_have_key;
-
-    /* prepare the buffers for MPI communication */
-    kk = 0;
+    /* num_groups now is the number of non-zero size groups */
     for (ii=0; ii<num_groups; ii++) {
-        if (groups[ii].key_base == NULL) continue;
-        extents[kk]  = groups[ii].cnt_dset->cnt_len;
-        cnt_lens[kk] = groups[ii].cnt_dset->cnt_len;
-        cnt_offs[kk] = 0;
-        seq_lens[kk] = groups[ii].seq_dset->seq_len;
-        seq_offs[kk] = 0;
-        kk++;
-    }
+        assert(groups[ii].shared_dim0 > 0);
 
-    /* get starting offsets for writing key.cnt and key.seq in parallel */
-    MPI_Exscan(cnt_lens, cnt_offs, num_groups_have_key*2, MPI_HSIZE_T, MPI_SUM,
-               comm);
-    num_exscan++;
+        DSInfo_t     *base = groups[ii].key_base;
+        DSInfo_t     *seq = groups[ii].seq_dset;
+        unsigned int *base_buf, *base_ptr;
+        int64_t      *seq_buf, *seq_ptr;
 
-#ifdef DELAY_KEY_DSET_CREATION
-    /* get the globally concatenated size of dataset key.cnt */
-    MPI_Allreduce(MPI_IN_PLACE, extents, num_groups_have_key, MPI_HSIZE_T,
-                  MPI_SUM, comm);
-    num_allreduce++;
-
-    kk = 0;
-    for (ii=0; ii<num_groups; ii++) {
-        if (groups[ii].key_base == NULL) continue;
-        assert(groups[ii].seq_dset != NULL);
-        assert(groups[ii].cnt_dset != NULL);
-
-        hid_t grp_id;
-        grp_id = H5Gopen(output_file_id, groups[ii].name.c_str(), H5P_DEFAULT);
-        if (grp_id < 0) HANDLE_ERROR("H5Gopen")
-
-        DSInfo_t *seq_dset = groups[ii].seq_dset;
-        DSInfo_t *cnt_dset = groups[ii].cnt_dset;
-
-        /* add offset to local sequence IDs to make them global unique */
-        for (jj=0; jj<seq_dset->local_dims[0]; jj++)
-            seq_dset->seq_buf[jj] += seq_offs[kk];
-
-        /* create dataset key.seq */
-        err = create_dataset(grp_id, *seq_dset, false);
-        if (err < 0) HANDLE_ERROR("create_dataset")
-
-        /* write dataset key.seq */
-        start[0] = groups[ii].seq_dset->global_off;
-        err = write_dataset_2D(*seq_dset, start, seq_dset->local_dims,
-                               seq_dset->seq_buf);
-        if (err < 0) HANDLE_ERROR("write_dataset_2D")
-        delete [] seq_dset->seq_buf;
-
-        err = H5Dclose(seq_dset->out_dset_id);
-        if (err < 0) HANDLE_ERROR("H5Dclose");
-
-        /* create dataset key.cnt */
-        cnt_dset->global_dims[0] = extents[kk];
-        err = create_dataset(grp_id, *cnt_dset, false);
-        if (err < 0) HANDLE_ERROR("create_dataset")
-
-        /* write dataset key.cnt */
-        start[0] = cnt_offs[kk];
-        count[0] = cnt_lens[kk];
-        err = write_dataset_2D(*cnt_dset, start, count, cnt_dset->cnt_buf);
-        if (err < 0) HANDLE_ERROR("write_dataset_2D")
-        delete [] cnt_dset->cnt_buf;
-
-        err = H5Dclose(cnt_dset->out_dset_id);
-        if (err < 0) HANDLE_ERROR("H5Dclose");
-
-        err = H5Gclose(grp_id);
-        if (err < 0) HANDLE_ERROR("H5Gclose")
-        kk++;
-    }
-#else
-    if (set_extent) {
-        /* get the globally concatenated size of dataset key.cnt */
-        MPI_Allreduce(MPI_IN_PLACE, extents, num_groups_have_key, MPI_HSIZE_T,
-                      MPI_SUM, comm);
-        num_allreduce++;
-    }
-
-    kk = 0;
-    for (ii=0; ii<num_groups; ii++) {
-        if (groups[ii].key_base == NULL) continue;
-        assert(groups[ii].seq_dset != NULL);
-        assert(groups[ii].cnt_dset != NULL);
-
-        DSInfo_t *seq_dset = groups[ii].seq_dset;
-        DSInfo_t *cnt_dset = groups[ii].cnt_dset;
-
-        /* add offset to local sequence IDs to make them global unique */
-        for (jj=0; jj<seq_dset->local_dims[0]; jj++)
-            seq_dset->seq_buf[jj] += seq_offs[kk];
-
-        /* write dataset key.seq */
-        start[0] = groups[ii].seq_dset->global_off;
-        err = write_dataset_2D(*seq_dset, start, seq_dset->local_dims,
-                               seq_dset->seq_buf);
-        if (err < 0) HANDLE_ERROR("write_dataset_2D")
-        delete [] seq_dset->seq_buf;
-
-        err = H5Dclose(seq_dset->out_dset_id);
-        if (err < 0) HANDLE_ERROR("H5Dclose");
-
-        /* write dataset key.cnt */
-        start[0] = cnt_offs[kk];
-        count[0] = cnt_lens[kk];
-        err = write_dataset_2D(*cnt_dset, start, count, cnt_dset->cnt_buf);
-        if (err < 0) HANDLE_ERROR("write_dataset_2D")
-        delete [] cnt_dset->cnt_buf;
-
-#ifdef SET_EXTET_INTERLEAVE_WRITE
-/* Interleaving H5Dset_extent() with H5Dwrite() in the same loop has shown
- * very expensive on Cori @NERSC. Below we extract calls to H5Dset_extent()
- * in a separate loop.
- */
-        /* set dataset key.cnt to its true size. Warning: very expensive !!!
-         * For now, we rely on the default fill value of 0 in key.cnt to tell
-         * its true size. Luckily, value 0 will not affect the calculation of
-         * data partitioning when using key.cnt (which stores counts of
-         * consecutive elements sharing the same key.
+        /* allocate buffer to read the key base dataset. Note local_dims[0] is
+         * the aggregated dim[0] size of assigned input files.
          */
-        if (set_extent) {
-#if defined PROFILE && PROFILE
-            double ts;
-#endif
-            SET_TIMER(ts)
-            count[0] = extents[kk];
-            err = H5Dset_extent(cnt_dset->out_dset_id, count);
-            if (err < 0) HANDLE_ERROR("H5Dset_extent")
-            GET_TIMER(ts, t_set_extent)
+        base_buf = new unsigned int [base->local_dims[0]];
+        base_ptr = base_buf;
+        seq_buf = new int64_t [base->local_dims[0]];
+        seq_ptr = seq_buf;
+
+        /* iterate all input files assigned to this process */
+        for (jj=0; jj<base->in_dset_ids.size(); jj++) {
+            hid_t in_dset_id = base->in_dset_ids[jj];
+
+            /* read the entire partition base dataset */
+            err = H5Dread(in_dset_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
+                          H5P_DEFAULT, base_ptr);
+            if (err < 0) HANDLE_ERROR("H5Dread")
+
+            /* close input key base dataset, as it is no longer used */
+            err = H5Dclose(in_dset_id);
+            if (err < 0) HANDLE_ERROR("H5Dclose");
+
+            /* populate contents of key seq dataset from lookup table jj */
+            for (kk=0; kk<base->in_dim0[jj]; kk++)
+                seq_ptr[kk] = lookup_table[jj][base_ptr[kk]];
+
+            base_ptr += base->in_dim0[jj];
+            seq_ptr  += base->in_dim0[jj];
         }
-        err = H5Dclose(cnt_dset->out_dset_id);
+
+        /* write partition key base dataset */
+        start[0] = base->global_off;
+        start[1] = 0;
+        err = write_dataset_2D(*base, start, base->local_dims, base_buf);
+        if (err < 0) HANDLE_ERROR("write_dataset_2D")
+
+        /* close partition key base dataset */
+        err = H5Tclose(base->type_id);
+        if (err < 0) HANDLE_ERROR("H5Tclose")
+        err = H5Dclose(base->out_dset_id);
         if (err < 0) HANDLE_ERROR("H5Dclose");
-#else
-        if (!set_extent) {
-            err = H5Dclose(cnt_dset->out_dset_id);
-            if (err < 0) HANDLE_ERROR("H5Dclose");
-        }
-#endif
-        kk++;
-    }
+        base->out_dset_id = -1;
 
-#ifndef SET_EXTET_INTERLEAVE_WRITE
-    if (set_extent) {
-        /* Set dataset key.cnt to its true size.
-         * Note calling H5Dset_extent() is expensive. Calling H5Dset_extent()
-         * inside the loop with H5Dwrite() called interleaved is even more
-         * expensive (like 10 times slower) !!!
-         * Below, we use a separate loop to call H5Dset_extent() altogether
-         * after all calls to H5Dwrite() are complete.
-         */
-#if defined PROFILE && PROFILE
-        double ts;
-#endif
-        SET_TIMER(ts)
-        kk = 0;
-        for (ii=0; ii<num_groups; ii++) {
-            if (groups[ii].key_base == NULL) continue;
-            count[0] = extents[kk];
-            err = H5Dset_extent(groups[ii].cnt_dset->out_dset_id, count);
-            if (err < 0) HANDLE_ERROR("H5Dset_extent")
+        /* write partition key seq dataset */
+        err = write_dataset_2D(*seq, start, base->local_dims, seq_buf);
+        if (err < 0) HANDLE_ERROR("write_dataset_2D")
 
-            err = H5Dclose(groups[ii].cnt_dset->out_dset_id);
-            if (err < 0) HANDLE_ERROR("H5Dclose");
-            kk++;
-        }
-        GET_TIMER(ts, t_set_extent)
+        /* close partition key seq dataset */
+        err = H5Dclose(seq->out_dset_id);
+        if (err < 0) HANDLE_ERROR("H5Dclose");
+        seq->out_dset_id = -1;
+
+        delete [] base_buf;
+        delete [] seq_buf;
     }
-#endif
-#endif
 
 fn_exit:
-    delete []cnt_lens;
     return err_exit;
 }
 
-/*----< generate_partition_keys() >------------------------------------------*/
-int Concatenator::generate_partition_keys(GrpInfo  &grp,
-                                          DSInfo_t &base)
+/*----< generate_partition_key() >-------------------------------------------*/
+/* For each input file, read the entire dataset /spill/key_base into memory,
+ * and use its contents to build the key lookup table. The contents of
+ * /spill/key_base must be a list of unique integers. Lookup table can hash
+ * values in key_base to global (concatenated) unique keys. It will later
+ * be used to generate partition key seq dataset in each group.
+ */
+int Concatenator::generate_partition_key(GrpInfo &grp)  /* group /spill */
 {
     int err_exit=0;
+    size_t ii, jj;
     herr_t err;
-    size_t ii, jj, qq, nn;
-    void *base_buf;
-    unsigned int   *base_ibuf=NULL, *base_iptr=NULL;
-    unsigned short *base_sbuf=NULL, *base_sptr=NULL;
-    hsize_t start[2];
+    int64_t seq_off;
+    unsigned int *base_buf, *buf_ptr;
 
     assert(grp.key_base != NULL);
-    assert(base.global_dims[0] > 0);
+    assert(grp.key_base->global_dims[0] > 0);
 
-    /* allocate buffers for datasets base, key.seq, and key.cnt */
-    grp.seq_dset->seq_buf = new long long [base.local_dims[0]];
-    grp.cnt_dset->cnt_buf = new long long [base.local_dims[0]];
+    /* allocate buffer to read the partition key base dataset. Note
+     * local_dims[0] is the aggregated dim[0] size of assigned input files.
+     */
+    base_buf = new unsigned int [grp.key_base->local_dims[0]];
+    buf_ptr = base_buf;
+    seq_off = grp.key_base->global_off;
 
-    if (base.type_size == 4) {
-        base_ibuf = new unsigned int [base.local_dims[0]];
-        base_iptr = base_ibuf;
-        base_buf  = base_ibuf;
-    }
-    else if (base.type_size == 2) {
-        base_sbuf = new unsigned short [base.local_dims[0]];
-        base_sptr = base_sbuf;
-        base_buf  = base_sbuf;
-    }
-    else {
-        delete [] grp.seq_dset->seq_buf;
-        delete [] grp.cnt_dset->cnt_buf;
-        printf("Error in %s line %d: unsupported datatype size %zd for key base dataset\n",
-               __func__,__LINE__,base.type_size);
-        return -1;
-    }
+    /* iterate all input files assigned to this process */
+    for (ii=0; ii<grp.key_base->in_dset_ids.size(); ii++) {
+        hid_t in_dset_id = grp.key_base->in_dset_ids[ii];
 
-    qq = 0;
-    nn = 0;
-    grp.seq_dset->seq_len = 0;
-    for (ii=0; ii<base.in_dset_ids.size(); ii++) { /* iterate all input files */
-        hid_t in_dset_id = base.in_dset_ids[ii];
-        hsize_t in_dset_nrows = base.in_dim0[ii];
-
-        /* read the whole dataset 'base' */
-        if (base.type_size == 4)
-            err = H5Dread(in_dset_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
-                          H5P_DEFAULT, base_iptr);
-        else
-            err = H5Dread(in_dset_id, H5T_NATIVE_USHORT, H5S_ALL, H5S_ALL,
-                          H5P_DEFAULT, base_sptr);
+        /* read the entire partition key base dataset */
+        err = H5Dread(in_dset_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
+                      H5P_DEFAULT, buf_ptr);
         if (err < 0) HANDLE_ERROR("H5Dread")
 
-        /* close input dataset base, as it has been entirely read */
-        err = H5Dclose(in_dset_id);
-        if (err < 0) HANDLE_ERROR("H5Dclose");
+        /* use contents of key base dataset to construct a lookup hash table */
+        for (jj=0; jj<grp.key_base->in_dim0[ii]; jj++)
+            lookup_table[ii][buf_ptr[jj]] = seq_off + jj;
 
-        /* use contents of 'base' to calculate contents of dataset 'key.seq'
-         * dataset 'key.cnt' */
-        grp.seq_dset->seq_buf[qq++] = grp.seq_dset->seq_len;
-        grp.cnt_dset->cnt_buf[nn] = 1;
-        if (base.type_size == 4) {
-            for (jj=1; jj<in_dset_nrows; jj++) {
-                if (base_iptr[jj] == base_iptr[jj-1]) /* repeated ID */
-                    grp.cnt_dset->cnt_buf[nn]++;      /* increment count */
-                else {
-                    grp.seq_dset->seq_len++; /* increment no. of unique IDs */
-                    grp.cnt_dset->cnt_buf[++nn] = 1; /* a new unique ID */
-                }
-                /* assign the unique ID */
-                grp.seq_dset->seq_buf[qq++] = grp.seq_dset->seq_len;
-            }
-            base_iptr += in_dset_nrows;
-        }
-        else if (base.type_size == 2) {
-            for (jj=1; jj<in_dset_nrows; jj++) {
-                if (base_sptr[jj] == base_sptr[jj-1]) /* repeated ID */
-                    grp.cnt_dset->cnt_buf[nn]++;      /* increment count */
-                else {
-                    grp.seq_dset->seq_len++; /* increment no. of unique IDs */
-                    grp.cnt_dset->cnt_buf[++nn] = 1; /* a new unique ID */
-                }
-                /* assign the unique ID */
-                grp.seq_dset->seq_buf[qq++] = grp.seq_dset->seq_len;
-            }
-            base_sptr += in_dset_nrows;
-        }
-        nn++;                    /* increment one for next file */
-        grp.seq_dset->seq_len++; /* increment one for next file */
+        buf_ptr += grp.key_base->in_dim0[ii];
+        seq_off += grp.key_base->in_dim0[ii];
     }
-    grp.cnt_dset->cnt_len = nn; /* number of elements in cnt_buf */
-    /* Now, seq_len is the number of unique IDs in seq_buf */
-
-    /* write dataset base */
-    start[0] = base.global_off;
-    start[1] = 0;
-    err = write_dataset_2D(base, start, base.local_dims, base_buf);
-    if (err < 0) HANDLE_ERROR("write_dataset_2D")
-
-    /* close datasets key base */
-    err = H5Tclose(base.type_id);
-    if (err < 0) HANDLE_ERROR("H5Tclose")
-    err = H5Dclose(base.out_dset_id);
-    if (err < 0) HANDLE_ERROR("H5Dclose");
-    base.out_dset_id = -1;
 
 fn_exit:
-    if (base.type_size == 4)
-        delete []base_ibuf;
-    else if (base.type_size == 2)
-        delete []base_sbuf;
+    delete [] base_buf;
     return err_exit;
 }
 
@@ -340,21 +159,29 @@ int Concatenator::concat_datasets(bool process_large_dsets)
     H5Venable();
 #endif
 
+    if (add_partition_key && !process_large_dsets)  {
+        /* Read partition key base dataset from group /spill and generate the
+         * lookup table.
+         */
+        err = generate_partition_key(groups[spill_grp_no]);
+        if (err < 0) HANDLE_ERROR("generate_partition_key")
+    }
+
     /* Traverse over all the groups and datasets. */
     for (ii=0; ii<num_groups; ii++) {
         size_t num_dsets = groups[ii].num_dsets;
-        bool check_key_base = false;
-        if (groups[ii].key_base != NULL) {
-            check_key_base = !process_large_dsets;
-            num_dsets -= 2;
-            /* key.seq and key.cnt are the last 2 added. In this loop, their
-             * contents are generated from the key base dataset and cached in
-             * memory.  Later, they will be written to output file later in
-             * write_partition_key_datasets().
+
+        if (add_partition_key && !process_large_dsets)  {
+            /* Skip writing the partition key seq dataset. -1 is because key
+             * seq is the last dataset added.
              */
+            num_dsets--;
         }
 
         for (jj=0; jj<num_dsets; jj++) {
+            /* Skip writing the key base dataset */
+            if (groups[ii].dsets[jj].is_key_base) continue;
+
             DSInfo_t &dset = groups[ii].dsets[jj];
             assert(dset.global_dims[0] > 0);
 
@@ -364,16 +191,6 @@ int Concatenator::concat_datasets(bool process_large_dsets)
             }
             else if (dset.global_dims[1] > 1)
                 continue;
-
-            if (check_key_base && dset.is_key_base) {
-                /* Use 'part_key_base' to generate the partitioning key
-                 * datasets and write base dataset to output file.
-                 */
-                err = generate_partition_keys(groups[ii], dset);
-                if (err < 0) HANDLE_ERROR("generate_partition_keys")
-                check_key_base = false;
-                continue;
-            }
 
             hsize_t row_size = dset.global_dims[1] * dset.type_size;
             hsize_t nrows_in_buf = io_buffer_size / row_size;

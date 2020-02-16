@@ -151,8 +151,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             err = H5Pget_chunk(r_dcpl, 2, in_chunk_dims);
             if (err < 0) HANDLE_ERROR("H5Pget_chunk")
 
-            int numfilt = H5Pget_nfilters(r_dcpl);
-            assert(numfilt == 1);
+            assert(1 == H5Pget_nfilters(r_dcpl));
         }
         err = H5Pclose(r_dcpl);
         if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl")

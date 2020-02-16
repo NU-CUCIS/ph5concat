@@ -9,7 +9,7 @@ dnl
 
 dnl autoconf v2.69 was released in 2012-04-24
 AC_PREREQ([2.69])
-AC_INIT([ph5concat],[1.0.0],[],[ph5concat],[])
+AC_INIT([ph5concat],[1.1.0],[],[ph5concat],[])
 
 AC_CONFIG_HEADERS([config.h])
 AH_TOP([/*

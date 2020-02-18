@@ -117,12 +117,13 @@ The command usage is shown below.
     partition key dataset created in the output file stores a list of unique
     IDs corresponding to the unique 3-tuples. The unique IDs are consistent
     among datasets across all groups. Requirements for the HDF5 file:
-      1. contains multiple groups at root level
-      2. each group may contain multiple 2D datasets
-      3. all datasets in the same group share the 1st dimension size
-      4. each group must contain datasets run, subrun, and 'base_name'
-      5. the second dimension size of the 3 daatsets must be 1
-      6. data type of the 3 datasets msut be H5T_STD_U32LE
+      1. must contain datasets /spill/run and /spill/subrun
+      2. contains multiple groups at root level
+      3. each group may contain multiple 2D datasets
+      4. all datasets in the same group share the 1st dimension size
+      5. each group must contain datasets run, subrun, and 'base_name'
+      6. the second dimension size of the 3 daatsets must be 1
+      7. data type of the 3 datasets msut be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
   Example run and output:

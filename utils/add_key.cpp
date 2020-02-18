@@ -382,8 +382,8 @@ usage(char *progname)
     2. each group may contain multiple 2D datasets\n\
     3. all datasets in the same group share the 1st dimension size\n\
     4. each group must contain datasets run, subrun, and 'base_name'\n\
-    5. the second dimension size of the 3 daatsets must be 1\n\
-    6. data type of the 3 datasets msut be H5T_STD_U32LE\n\
+    5. the second dimension size of the 3 datasets must be 1\n\
+    6. data type of the 3 datasets must be H5T_STD_U32LE\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     printf("Usage: %s [-h|-v] -k base_name file_name\n%s\n", progname, USAGE);

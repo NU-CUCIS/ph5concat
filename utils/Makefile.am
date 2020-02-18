@@ -15,10 +15,12 @@ if PH5CONCAT_PROFILING
 endif
 
 noinst_PROGRAMS = rechunk \
-                  add_key
+                  add_key \
+                  sort_file_list
 
 rechunk_SOURCES = rechunk.c
 add_key_SOURCES = add_key.cpp
+sort_file_list_SOURCES = sort_file_list.cpp
 
 EXTRA_DIST = README.md \
              batch.sh
@@ -28,5 +30,7 @@ dist-hook:
 	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/rechunk.c
 	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/add_key.cpp
 	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/add_key.cpp
+	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/sort_file_list.cpp
+	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/sort_file_list.cpp
 
 .PHONY:

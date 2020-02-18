@@ -1,5 +1,10 @@
 # Utility Programs
 
+* [rechunk](#rechunk)
+* [add_key](#add_key)
+* [sort_file_list](#sort_file_list)
+
+---
 ## rechunk
 
 * **rechunk** is a utility program running in sequential for adjusting the
@@ -146,4 +151,56 @@ The command usage is shown below.
   File close                        =    0.08 sec
   -------------------------------------------------------
   End-to-end                        =  722.81 sec
+  ```
+---
+## sort_file_list
+
+* **sort_file_list** is a utility program to be run in sequential. It reads
+  a text input file containing a list of HDF5 file names and creates a new
+  output text file containing the same set of HDF5 file names organized in an
+  increasing order based on the run IDs and subrun ID stored in the HDF5 files.
+  The output file can be used as input to the parallel dataset concatenation
+  program `ph5_concat`, so that the data in the concatenated file follows the
+  increasing  order of run and subrun IDs.
+
+The command usage is shown below.
+  ```
+  % ./sort_file_list -h
+  Usage: sort_file_list [-h|-v|-o outfile] infile
+    [-h]          print this command usage message
+    [-v]          verbose mode (default: off)
+    [-d]          debug mode (default: off)
+    [-o outfile]  output file name (default: 'out_list.txt')
+    infile        input file name contains a list of HDF5 file names (required)
+
+    This utility program re-order the files in infile into a sorted list based
+    on the increasing order of 'run' and 'subrun' IDs. Requirements for the input
+    HDF5 files:
+      1. must contain datasets /spill/run and /spill/subrun
+      2. contains multiple groups at root level
+      3. each group may contain multiple 2D datasets
+      4. all datasets in the same group share the 1st dimension size
+      5. each group must contain datasets run and subrun'
+      6. data type of datasets run and subrun must be H5T_STD_U32LE
+    *ph5concat version 1.1.0 of March 1, 2020.
+  ```
+  Example run and output:
+  ```
+  % cat sample_in_list.txt 
+  ND/neardet_r00011981_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND/neardet_r00011981_s07_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND/neardet_r00011991_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND/neardet_r00011988_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND/neardet_r00011982_s04_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND/neardet_r00011981_s24_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+
+  % ./sort_file_list -o sample_out_list.txt sample_in_list.txt
+
+  % cat sample_out_list.txt 
+  ND1/neardet_r00011981_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND1/neardet_r00011981_s07_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND1/neardet_r00011981_s24_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND1/neardet_r00011982_s04_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND1/neardet_r00011988_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
+  ND1/neardet_r00011991_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ```

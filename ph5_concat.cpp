@@ -60,7 +60,7 @@ Concatenator::Concatenator(int                nprocs,
     raw_chunk_cache_size = 64*1024*1024; // raw chunk cache size (64 MiB)
     max_local_size_in_bytes = 0;
 
-    compress_threshold *= 1048576;
+    this->compress_threshold *= 1048576;
 
     original_num_groups = 0;
     num_groups_have_key = 0;

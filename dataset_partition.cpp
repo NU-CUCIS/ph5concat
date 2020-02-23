@@ -11,7 +11,7 @@
 #include <assert.h>
 #include "ph5_concat.hpp"
 
-int Concatenator::concat_small_datasets(std::vector<std::string> const &inputs)
+int Concatenator::concat_small_datasets(vector<string> const &inputs)
 {
     int err_exit=0;
     size_t ii, jj, kk;
@@ -44,7 +44,7 @@ fn_exit:
     return err_exit;
 }
 
-int Concatenator::open_input_files(std::vector<std::string> files,
+int Concatenator::open_input_files(vector<string> files,
                                    bool collective_io)
 {
     int err_exit=0;
@@ -81,11 +81,11 @@ int Concatenator::open_input_files(std::vector<std::string> files,
                 file_id = H5Fopen(file->c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
             }
             if (file_id < 0) HANDLE_ERROR("H5Fopen")
-            input_files.insert(std::make_pair(*file, file_id));
+            input_files.insert(make_pair(*file, file_id));
         }
         else {
             /* error: repeated file detected */
-            std::cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<*file<<std::endl;
+            cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<*file<<endl;
             err_exit = -1;
             goto fn_exit;
         }
@@ -98,7 +98,7 @@ fn_exit:
     return err_exit;
 }
 
-int Concatenator::concat_large_datasets(std::vector<std::string> const &inputs)
+int Concatenator::concat_large_datasets(vector<string> const &inputs)
 {
     int err_exit=0;
     size_t ii, jj, kk;
@@ -135,14 +135,14 @@ int Concatenator::concat_large_datasets(std::vector<std::string> const &inputs)
                 /* Open a dataset from one input file and read the entire local
                  * dataset. We assume any local dataset fits into the memory
                  * space of the node. */
-                std::string path = "/" + groups[ii].name + "/" + dset.name;
+                string path = "/" + groups[ii].name + "/" + dset.name;
                 hid_t id;
                 id = H5Dopen(ff->second, path.c_str(), H5P_DEFAULT);
                 if (id < 0) HANDLE_ERROR("H5Dopen")
 
                 err = read_2d_dataset(id, dset, counts, offsets, dset_size);
                 if (err < 0) {
-                    std::cout<<"read_2d_dataset failed."<<std::endl;
+                    cout<<"read_2d_dataset failed."<<endl;
                     return -1;
                 }
 
@@ -152,7 +152,7 @@ int Concatenator::concat_large_datasets(std::vector<std::string> const &inputs)
 
                 err = write_2d_dataset(dset, counts, offsets, dset_size);
                 if (err < 0) {
-                    std::cout<<"write_2d_dataset failed."<<std::endl;
+                    cout<<"write_2d_dataset failed."<<endl;
                     return -1;
                 }
             }
@@ -224,11 +224,11 @@ int Concatenator::write_dataset(DSInfo_t &dset,
 #endif
 
 #if defined DEBUG && DEBUG
-    std::cout<<"R"<<rank<<" "<<dset.name.c_str()<<" type: "<<dset.type_id
-             <<" type_size: "<<dset.type_size<<" num_rows x cols: "
-             <<dset.global_dims[0]<<" x "<<dset.global_dims[1]<<" write off: "
-             <<offs[0]<<" x "<<offs[1]<<" lens: "<<lens[0]<<" x "<<lens[1]
-             <<std::endl;
+    cout<<"R"<<rank<<" "<<dset.name.c_str()<<" type: "<<dset.type_id
+        <<" type_size: "<<dset.type_size<<" num_rows x cols: "
+        <<dset.global_dims[0]<<" x "<<dset.global_dims[1]<<" write off: "
+        <<offs[0]<<" x "<<offs[1]<<" lens: "<<lens[0]<<" x "<<lens[1]
+        <<endl;
 #endif
 
     /* Setup the memory space and the file space for the wrtie. */
@@ -340,10 +340,10 @@ int Concatenator::write_2d_dataset(DSInfo_t &dset,
 
     assert(dset.global_dims[0] > 0);
 #if defined DEBUG && DEBUG
-    std::cout<<"R"<<rank<<" "<<dset.name.c_str()<<" type: "<<dset.type_id
-             <<" type_size: "<<dset.type_size<<" num_rows x cols: "
-             <<dset.global_dims[0]<<" x "<<dset.global_dims[1]
-             <<" chunk_size: "<<dset.chunk_size<<std::endl;
+    cout<<"R"<<rank<<" "<<dset.name.c_str()<<" type: "<<dset.type_id
+        <<" type_size: "<<dset.type_size<<" num_rows x cols: "
+        <<dset.global_dims[0]<<" x "<<dset.global_dims[1]
+        <<" chunk_size: "<<dset.chunk_size<<endl;
 #endif
     /* Setup the memory space and the file space for the wrtie. */
     memspace_id = H5Screate_simple(2, counts, NULL);
@@ -402,8 +402,8 @@ int Concatenator::numerology(DSInfo_t &dset,
     }
 
     if (dset.chunk_size <= 0) {
-        std::cout<<"/"<<dset.name.c_str()<<"/"<<dset.name.c_str()<<
-                   " has an invalid chunk_size."<<std::endl;
+        cout<<"/"<<dset.name.c_str()<<"/"<<dset.name.c_str()
+            <<" has an invalid chunk_size."<<endl;
         return -1;
     }
 

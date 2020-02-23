@@ -23,7 +23,7 @@ using namespace std;
 }
 
 #define HANDLE_ERROR(fname) { \
-    std::cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<fname<<" failed."<<std::endl; \
+    cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<fname<<" failed."<<endl; \
     err_exit = -1; \
     goto fn_exit; \
 }
@@ -40,7 +40,7 @@ using namespace std;
  * Metadata of each dataset.
  */
 struct DSInfo_t {
-    std::string   name;          /* name of dataset */
+    string   name;          /* name of dataset */
     hsize_t       local_dims[2]; /* dim sizes, aggregated from local files */
     hsize_t       global_dims[2];/* dim sizes, aggregated from all files */
     hsize_t       chunk_dims[2]; /* chunk dimension sizes */
@@ -58,18 +58,18 @@ struct DSInfo_t {
     hsize_t       seq_len;       /* number of unique IDs in key.seq dataset */
     long long    *seq_buf;       /* key.seq buffer */
 
-    std::vector<hid_t>   in_dset_ids;/* dataset IDs of opened input files */
-    std::vector<hsize_t> in_dim0;    /* 1st dim sizes in assigned input files */
+    vector<hid_t>   in_dset_ids;/* dataset IDs of opened input files */
+    vector<hsize_t> in_dim0;    /* 1st dim sizes in assigned input files */
 
 
     hsize_t cur_chunk_offset; /* used in concatenation phase: */
     hsize_t cur_offset;       /* used in concatenation phase: offsets for next round of collective write */
-    std::vector<hsize_t> global_num_rows; /* TODO: [nprocs] boundaries of data partitioning */
+    vector<hsize_t> global_num_rows; /* TODO: [nprocs] boundaries of data partitioning */
 };
 typedef struct DSInfo_t DSInfo_t;
 
 struct GrpInfo {
-    std::string  name;        /* name of dataset */
+    string  name;        /* name of dataset */
     hid_t        id;          /* HDF5 group ID */
     size_t       num_dsets;   /* number of dataset objects in this group */
     size_t       shared_dim0; /* size of common 1st dimension (all datasets in
@@ -90,13 +90,13 @@ typedef unordered_map<int, int64_t> table;
 class Concatenator {
 public:
     Concatenator(int nprocs, int rank, MPI_Comm comm, MPI_Info info,
-                 size_t num_input_files, std::string const& output,
+                 size_t num_input_files, string const& output,
                  bool posix_open, bool in_memory_io, bool chunk_caching,
                  size_t compress_threshold, bool one_process_create,
                  unsigned int zip_level, size_t buffer_size, int io_strategy,
-                 std::string const& part_key_base);
+                 string const& part_key_base);
     ~Concatenator();
-    int construct_metadata(std::vector<std::string> const &inputs);
+    int construct_metadata(vector<string> const &inputs);
     int file_create();
 
     /* File-based partitioning (all datasets are read independently, but
@@ -105,8 +105,8 @@ public:
 
     /* Dataset-based partitioning (small datasets are read independently, large
      * datasets are read collectively.  Writes are done collectively. */
-    int concat_small_datasets(std::vector<std::string> const &inputs);
-    int concat_large_datasets(std::vector<std::string> const &inputs);
+    int concat_small_datasets(vector<string> const &inputs);
+    int concat_large_datasets(vector<string> const &inputs);
 
     /* finalize and write partitioning key dataset to file */
     int write_partition_key_dataset();
@@ -155,8 +155,8 @@ private:
     bool     add_partition_key;  /* whether to create partition key */
     int      io_strategy;        /* 1 or 2 (parallel I/O strategy) */
 
-    std::string output_file_name;
-    std::string part_key_base; /* dataset used to create partition key */
+    string output_file_name;
+    string part_key_base; /* dataset used to create partition key */
 
     size_t   num_groups;          /* number of groups */
     size_t   original_num_groups; /* some groups may contain zero-sized data */
@@ -176,7 +176,7 @@ private:
     size_t  output_meta_cache_size;
     size_t  raw_chunk_cache_size;
     hsize_t max_local_size_in_bytes;
-    std::unordered_map<std::string, hid_t> input_files;
+    unordered_map<string, hid_t> input_files;
     hid_t output_file_id;
     hid_t dxpl_id; /* HDF5 data transfer property list identifier */
 
@@ -219,7 +219,7 @@ private:
     int write_dataset_2D(DSInfo_t &dset_info, hsize_t *offs, hsize_t *lens,
                          void *wbuf);
 
-    int open_input_files(std::vector<std::string> files, bool collective_io);
+    int open_input_files(vector<string> files, bool collective_io);
 
     int numerology(DSInfo_t &dset_info, hsize_t *dset_size,
                    hsize_t *offsets, hsize_t *counts);

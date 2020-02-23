@@ -23,21 +23,21 @@
 #include "ph5_concat.hpp"
 
 /*----< Concatenator() >-----------------------------------------------------*/
-Concatenator::Concatenator(int                nprocs,
-                           int                rank,
-                           MPI_Comm           comm,
-                           MPI_Info           info,
-                           size_t             num_input_files,
-                           std::string const& output,
-                           bool               posix_open,
-                           bool               in_memory_io,
-                           bool               chunk_caching,
-                           size_t             compress_threshold,
-                           bool               one_process_create,
-                           unsigned int       zip_level,
-                           size_t             buffer_size,
-                           int                io_strategy,
-                           std::string const& part_key_base) :
+Concatenator::Concatenator(int           nprocs,
+                           int           rank,
+                           MPI_Comm      comm,
+                           MPI_Info      info,
+                           size_t        num_input_files,
+                           string const& output,
+                           bool          posix_open,
+                           bool          in_memory_io,
+                           bool          chunk_caching,
+                           size_t        compress_threshold,
+                           bool          one_process_create,
+                           unsigned int  zip_level,
+                           size_t        buffer_size,
+                           int           io_strategy,
+                           string const& part_key_base) :
     comm(comm),
     info(info),
     nprocs(nprocs),
@@ -165,7 +165,7 @@ herr_t op_func(hid_t obj, const char *name, const H5O_info_t *info, void *me)
 /* Collect all metadata of groups and datasets from the assigned input files
  * and call MPI functions to calculated the aggregated sizes.
  */
-int Concatenator::construct_metadata(std::vector<std::string> const &inputs)
+int Concatenator::construct_metadata(vector<string> const &inputs)
 {
     int err_exit=0;
     herr_t err;
@@ -232,7 +232,7 @@ int Concatenator::construct_metadata(std::vector<std::string> const &inputs)
         /* Instead of closing the input files, we keep the file handles
          * and re-use them later when concatenating datasets.
          */
-        input_files.insert(std::make_pair(*it, file_id));
+        input_files.insert(make_pair(*it, file_id));
     }
 
     if (fapl_id != H5P_DEFAULT) {
@@ -363,8 +363,7 @@ int Concatenator::file_create()
             output_file_id = H5Fcreate(output_file_name.c_str(), H5F_ACC_EXCL,
                                        H5P_DEFAULT, H5P_DEFAULT);
             if (output_file_id < 0) {
-                std::cout<<output_file_name.c_str()<<" already exists."
-                         <<std::endl;
+                cout<<output_file_name.c_str()<<" already exists." <<endl;
                 return -1;
             }
 
@@ -408,8 +407,7 @@ int Concatenator::file_create()
         output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR,
                                  fapl_id);
         if (output_file_id < 0) {
-            std::cout<<output_file_name.c_str()<<" failed to open file."
-                     <<std::endl;
+            cout<<output_file_name.c_str()<<" failed to open file." <<endl;
             return -1;
         }
 
@@ -461,7 +459,7 @@ int Concatenator::file_create()
         output_file_id = H5Fcreate(output_file_name.c_str(), H5F_ACC_EXCL,
                                    H5P_DEFAULT, fapl_id);
         if (output_file_id < 0) {
-            std::cout<<output_file_name.c_str()<<" already exists."<<std::endl;
+            cout<<output_file_name.c_str()<<" already exists."<<endl;
             return -1;
         }
 
@@ -576,7 +574,7 @@ int Concatenator::collect_metadata(hid_t             obj_id,
 {
     static int grp_no=-1, file_no=-1;
     herr_t err;
-    std::unordered_map<std::string, DSInfo_t> grp;
+    unordered_map<string, DSInfo_t> grp;
 
     if (obj_info->type == H5O_TYPE_GROUP) {
         /* retrieve metadata about this group */
@@ -758,7 +756,7 @@ int check_h5_objects(const char *filename, hid_t fid)
     if (howmany > 1) printf("open objects:\n");
 
     for (ii=0; ii<howmany; ii++) {
-         std::string type_name="";
+         string type_name="";
          ot = H5Iget_type(objs[ii]);
               if (ot == H5I_FILE)      continue; /*  type_name = "H5I_FILE"; */
          else if (ot == H5I_GROUP)     type_name = "H5I_GROUP";
@@ -931,10 +929,9 @@ int Concatenator::create_dataset(hid_t     group_id,
         /* H5Pset_chunk changes/sets the layout to H5D_CHUNKED */
         err = H5Pset_chunk(dcpl_id, 2, dset.chunk_dims);
         if (err < 0) {
-            std::cout<<"size: "<<dset.global_dims[0]<<" x "
-                     <<dset.global_dims[1]<<" chunks: "
-                     <<dset.chunk_dims[0]<<" x "
-                     <<dset.chunk_dims[1]<<std::endl;
+            cout<<"size: "<<dset.global_dims[0]<<" x "<<dset.global_dims[1]
+                <<" chunks: "<<dset.chunk_dims[0]<<" x "<<dset.chunk_dims[1]
+                <<endl;
             HANDLE_ERROR("H5Pcreate")
         }
 
@@ -993,7 +990,7 @@ int Concatenator::create_dataset(hid_t     group_id,
         dcpl_id = H5P_DEFAULT;
     }
     else {
-        std::cout<<"dset.layout should've set to CHUNKED, COMPACT, or CONTIGUOUS..."<<std::endl;
+        cout<<"dset.layout should've set to CHUNKED, COMPACT, or CONTIGUOUS..."<<endl;
         return -1;
     }
 

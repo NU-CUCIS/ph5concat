@@ -53,10 +53,10 @@ public:
     size_t compress_threshold;
     unsigned int zip_level;
     size_t buffer_size;
-    std::vector<std::string> input_files;
-    std::string input_dirname;
-    std::string output_file;
-    std::string part_key_base;
+    vector<string> input_files;
+    string input_dirname;
+    string output_file;
+    string part_key_base;
 };
 
 /*----< usage() >------------------------------------------------------------*/
@@ -80,9 +80,9 @@ usage(char *progname)
   [-i infile]  input file containing HEP data files (default: list.txt)\n\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    std::cout<<"Usage: "<<progname<<
+    cout<<"Usage: "<<progname<<
     " [-h|-q|-d|-r|-s|-p] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]\n"
-    << USAGE << std::endl;
+    << USAGE << endl;
 }
 
 Options::Options(int argc, char **argv) :
@@ -101,8 +101,8 @@ Options::Options(int argc, char **argv) :
 {
     int opt;
     char *in_filename = NULL;
-    std::string line;
-    std::ifstream fd;
+    string line;
+    ifstream fd;
 
     while ((opt = getopt(argc, argv, "hqspdrt:m:k:i:o:z:b:")) != -1) {
         switch (opt) {
@@ -132,10 +132,10 @@ Options::Options(int argc, char **argv) :
                 in_filename = strdup(optarg);
                 break;
             case 'o':
-                output_file = std::string(optarg);
+                output_file = string(optarg);
                 break;
             case 'k':
-                part_key_base = std::string(optarg);
+                part_key_base = string(optarg);
                 break;
             case 'z':
                 zip_level = strtoul(optarg, NULL, 0);
@@ -159,11 +159,11 @@ Options::Options(int argc, char **argv) :
     try {
         fd.open(in_filename);
         if (!fd)
-            throw std::ios_base::failure(std::strerror(errno));
+            throw ios_base::failure(strerror(errno));
     }
-    catch (std::ifstream::failure& e) {
-        std::cerr << "Error: opening file \""<<in_filename<<"\" ("
-                  << e.what() << ")" << std::endl;
+    catch (ifstream::failure& e) {
+        cerr << "Error: opening file \""<<in_filename<<"\" ("
+             << e.what() << ")" << endl;
         err_exit = true;
         free(in_filename);
         return;
@@ -189,8 +189,8 @@ Options::Options(int argc, char **argv) :
 int main(int argc, char **argv)
 {
     int err=0, nprocs, rank;
-    std::vector<std::string> myinputs;
-    std::size_t offset, length, remainder;
+    vector<string> myinputs;
+    size_t offset, length, remainder;
 #if defined PROFILE && PROFILE
     double ts, step_time[8], max_time[10];
 #endif
@@ -199,6 +199,7 @@ int main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    /* all processes read and parse the command-line options */
     Options opt(argc, argv);
     if (opt.err_exit) {
         MPI_Finalize();
@@ -213,7 +214,7 @@ int main(int argc, char **argv)
         fflush(stdout);
     }
 
-    /* Evenly partition the input files among all workers. */
+    /* Evenly assign the input files among all workers. */
     length = opt.input_files.size() / nprocs;
     remainder = opt.input_files.size() % nprocs;
     if (static_cast<unsigned int>(rank) < remainder)
@@ -222,19 +223,19 @@ int main(int argc, char **argv)
     offset = rank * (opt.input_files.size() / nprocs);
     offset += (static_cast<unsigned int>(rank) < remainder) ? rank : remainder;
 
-    myinputs = std::vector<std::string>(opt.input_files.begin() + offset,
-                                        opt.input_files.begin() + offset + length);
+    myinputs = vector<string>(opt.input_files.begin() + offset,
+                              opt.input_files.begin() + offset + length);
     if (myinputs.size() == 0) {
-        std::cout<<"The number of input files should be larger than or equal to the number of processes."<<std::endl;
+        cout<<"The number of input files should be larger than or equal to the number of processes."<<endl;
         MPI_Finalize();
         return 1;
     }
 
 #if defined DEBUG && DEBUG
-    for (std::vector<std::string>::const_iterator it = myinputs.begin();
+    for (vector<string>::const_iterator it = myinputs.begin();
          it != myinputs.end(); it++)
-        std::cout<<"R"<<rank<<" "<<it->c_str()<<std::endl;
-    std::cout<<"R"<<rank<<" will work on "<<myinputs.size()<<" files."<<std::endl;
+        cout<<"R"<<rank<<" "<<it->c_str()<<endl;
+    cout<<"R"<<rank<<" will work on "<<myinputs.size()<<" files."<<endl;
 #endif
 
     Concatenator concat(nprocs, rank, MPI_COMM_WORLD, MPI_INFO_NULL,
@@ -255,7 +256,7 @@ int main(int argc, char **argv)
         unsigned int filter_info;
         htri_t avail = H5Zfilter_avail(H5Z_FILTER_DEFLATE);
         if (avail < 0) {
-            std::cout<<"Error failed when calling H5Zfilter_avail"<<std::endl;
+            cout<<"Error failed when calling H5Zfilter_avail"<<endl;
             // TODO: in C++, we should catch exception.
             goto prog_exit;
         }
@@ -263,7 +264,7 @@ int main(int argc, char **argv)
         err = H5Zget_filter_info(H5Z_FILTER_DEFLATE, &filter_info);
         if (!(filter_info & H5Z_FILTER_CONFIG_ENCODE_ENABLED) ||
             !(filter_info & H5Z_FILTER_CONFIG_DECODE_ENABLED)) {
-            std::cout<<"gzip filter not available for encoding and decoding!"<<std::endl;
+            cout<<"gzip filter not available for encoding and decoding!"<<endl;
             goto prog_exit;
         }
     }
@@ -272,7 +273,7 @@ int main(int argc, char **argv)
     SET_TIMER(ts)
     err = concat.construct_metadata(myinputs);
     if(err != 0){
-        std::cout<<"construct_metadata() failed."<<std::endl;
+        cout<<"construct_metadata() failed."<<endl;
         goto prog_exit;
     }
     GET_TIMER(ts, step_time[0])
@@ -282,7 +283,7 @@ int main(int argc, char **argv)
     SET_TIMER(ts)
     err = concat.file_create();
     if (err < 0) {
-        std::cout<<"file_create() failed."<<std::endl;
+        cout<<"file_create() failed."<<endl;
         goto prog_exit;
     }
     GET_TIMER(ts, step_time[1])
@@ -293,7 +294,7 @@ int main(int argc, char **argv)
         SET_TIMER(ts)
         err = concat.concat_small_datasets(myinputs);
         if (err < 0) {
-            std::cout<<"concat_small_datasets() failed."<<std::endl;
+            cout<<"concat_small_datasets() failed."<<endl;
             goto prog_exit;
         }
         GET_TIMER(ts, step_time[2])
@@ -304,7 +305,7 @@ int main(int argc, char **argv)
             /* write the partition keys */
             err = concat.write_partition_key_dataset();
             if (err < 0) {
-                std::cout<<"write_partition_key_dataset() failed."<<std::endl;
+                cout<<"write_partition_key_dataset() failed."<<endl;
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
@@ -313,7 +314,7 @@ int main(int argc, char **argv)
 
         err = concat.close_input_files();
         if (err < 0) {
-            std::cout<<"close_input_files() failed."<<std::endl;
+            cout<<"close_input_files() failed."<<endl;
             goto prog_exit;
         }
 
@@ -321,7 +322,7 @@ int main(int argc, char **argv)
         SET_TIMER(ts)
         err = concat.concat_large_datasets(opt.input_files);
         if (err < 0) {
-            std::cout<<"concat_large_datasets() failed."<<std::endl;
+            cout<<"concat_large_datasets() failed."<<endl;
             goto prog_exit;
         }
         GET_TIMER(ts, step_time[4])
@@ -332,7 +333,7 @@ int main(int argc, char **argv)
         SET_TIMER(ts)
         err = concat.concat_datasets(false);
         if (err < 0) {
-            std::cout<<"concat_datasets() failed."<<std::endl;
+            cout<<"concat_datasets() failed."<<endl;
             goto prog_exit;
         }
         GET_TIMER(ts, step_time[2])
@@ -343,7 +344,7 @@ int main(int argc, char **argv)
             /* write the partition keys */
             err = concat.write_partition_key_dataset();
             if (err < 0) {
-                std::cout<<"write_partition_key_dataset() failed."<<std::endl;
+                cout<<"write_partition_key_dataset() failed."<<endl;
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
@@ -354,7 +355,7 @@ int main(int argc, char **argv)
         SET_TIMER(ts)
         err = concat.concat_datasets(true);
         if (err < 0) {
-            std::cout<<"concat_datasets() failed."<<std::endl;
+            cout<<"concat_datasets() failed."<<endl;
             goto prog_exit;
         }
         GET_TIMER(ts, step_time[4])

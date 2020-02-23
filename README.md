@@ -2,33 +2,49 @@
 
 This software package contains C++ programs for concatenating HDF5 datasets
 across multiple files into a single file by appending individual datasets one
-after another.
+after another. In a typical neutrino particle collision experiment, the
+detector collects data into files over a period of time. Each file is labeled
+by IDs of 'run' and 'subrun' Runs are divided into Subruns. For example, a run
+is one day of data taking and a subrun is about an hour of data taking. Each
+file contains thousands of two-dimensional datasets, organized into hundreds
+of group, containing data describing the properties of a given particle type.
+To analyzing the data, individual datasets are required to be concatenated one
+after another across all files. As the data amount and number of files from a
+given experiment can be very large, the performance of the parallel
+concatenater is important.
 
 ## Input HDF5 Files
-* Each file contains data from a single subrun.
-* Each file contains multiple groups, each representing a "relational database
-  table".
+* Each file contains data from a single subrun. All groups contain datasets
+  named 'run', 'subrun', and 'evt'. The values in a 'run' dataset are the
+  same, representing the ID of a run. Similarly for 'subrun', the values in
+  a 'subrun' represent the ID of a subrun. However, the subrun IDs are unique
+  among all input files.
+* Each file contains multiple groups. The number of groups and group names are
+  the same among all input files.
 * Each group contains multiple datasets. The number of datasets in a group can
-  be different from others. Each dataset can be considered as a column of the
-  database table.
+  be different from each other. The number of datasets, dataset names, and
+  their memberships to the groups are the same among all input files.
 * Datasets in the same group are 2D arrays sharing the same size of 1st
-  (most significant) dimension. The 2nd dimension size may be different.
+  (most significant) dimension. Their 2nd dimension size may be different.
+* Datasets in different groups may be of different 1st dimension sizes.
 * Some of the datasets are actually 1D arrays whose 2nd dimension is of size 1.
 * Datasets can be of size zero, i.e. the 1st dimension being of size 0.
 * All the files have the same "schema", i.e. same numbers of groups and
-  datasets with the same names.
-* The size of 1st dimension of a dataset in an input file may be different from
-  the dataset with the same name in other files. The 2nd dimension should be of
-  the same size across all input files.
+  datasets, and their names.
+* The size of 1st dimension of a dataset in a group of an input file may be
+  different from the one in the same group but a different files.
+* The same datasets in the same group but in different input files share the
+  size of the 2nd dimension.
 
-## Software Requirements
+## Compiler and Software Requirements
 * A C++ compiler that support ISO C++0x standard or higher
 * MPI C and C++ compilers
 * An HDF5 library version 1.10.5 and later built with parallel I/O feature enabled
 
 ## Instructions to Build
-0. If building from a git clone of this repository, then run command below first.
-   Otherwise, if building from an official release, this step can be skipped.
+0. If building from a git clone of this repository, then run command below
+   first. Otherwise, if building from an official release, this step can be
+   skipped.
    ```
    autoreconf -i
    ```
@@ -174,7 +190,7 @@ after another.
 
 ## Questions/Comments:
 * Sunwoo Lee <slz839@eecs.northwestern.edu>
-* Wei-keng Liao <wkliao@eecs.northwestern.edu>
+* Wei-keng Liao <wkliao@northwestern.edu>
 
 ## Project funding supports:
 This material is based upon work supported by the U.S. Department of Energy,

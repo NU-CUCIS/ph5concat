@@ -625,6 +625,10 @@ int main(int argc, char **argv)
         if (err < 0) HANDLE_ERROR("H5Pset_fapl_core")
     }
 
+    /* increase metadata block size to 1 MiB */
+    err = H5Pset_meta_block_size(fapl_id, 1048576);
+    if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+
 /* This setting degrades the performance.
     err = incr_raw_data_chunk_cache(fapl_id);
     if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache")
@@ -652,6 +656,13 @@ int main(int argc, char **argv)
         goto fn_exit;
     }
     it_op.fd_out = fd_out;
+
+    if (verbose) {
+        hsize_t meta_block_size;
+        err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
+        if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+        printf("metadata block size is set  to %lld\n",meta_block_size);
+    }
 
     GET_TIMER(ts, te, timing[1])
 

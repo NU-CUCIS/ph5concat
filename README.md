@@ -4,14 +4,15 @@ This software package contains C++ programs for concatenating HDF5 datasets
 across multiple files into a single file by appending individual datasets one
 after another. In a typical neutrino particle collision experiment, the
 detector collects data into files over a period of time. Each file is labeled
-by IDs of 'run' and 'subrun' Runs are divided into Subruns. For example, a run
-is one day of data taking and a subrun is about an hour of data taking. Each
-file contains thousands of two-dimensional datasets, organized into hundreds
-of group, containing data describing the properties of a given particle type.
-To analyzing the data, individual datasets are required to be concatenated one
-after another across all files. As the data amount and number of files from a
-given experiment can be very large, the performance of the parallel
-concatenater is important.
+by IDs of 'run' and 'subrun'. Runs are divided into Subruns. A run can be, for
+example, one day of data taking and a subrun can be about an hour of data
+taking. Each file contains thousands of two-dimensional datasets, organized
+into hundreds of group, containing data describing the properties of a given
+particle type. To analyze the data, individual datasets are required to be
+concatenated one after another across all files, preferably in an increasing
+order of their run and subrun ID. As the data amount and number of files from a
+given experiment can become very large, the performance scalability of the
+parallel concatenater is important.
 
 ## Input HDF5 Files
 * Each file contains data from a single subrun. All groups contain datasets

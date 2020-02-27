@@ -131,7 +131,7 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
             }
         }
     }
-    else { /*  dataset "subrun" */
+    else { /* dataset "subrun" */
         if (! it_op->is_set_subrun) {
             it_op->is_set_subrun = true;
             it_op->subrun = buf[0];
@@ -166,14 +166,14 @@ usage(char *progname)
   [-o outfile]  output file name (default: 'out_list.txt')\n\
   infile        input file name contains a list of HDF5 file names (required)\n\n\
   This utility program re-order the files in infile into a sorted list based\n\
-  on the increasing order of 'run' and 'subrun' IDs. Requirements for the input\n\
-  HDF5 files:\n\
-    1. must contain datasets /spill/run and /spill/subrun\n\
-    2. contains multiple groups at root level\n\
+  on the increasing order of 'run' and 'subrun' IDs. Requirements for the\n\
+  input HDF5 files:\n\
+    1. must contain datasets '/spill/run' and '/spill/subrun'\n\
+    2. may contain multiple groups at root level\n\
     3. each group may contain multiple 2D datasets\n\
-    4. all datasets in the same group share the 1st dimension size\n\
-    5. each group must contain datasets run and subrun'\n\
-    6. data type of datasets run and subrun must be H5T_STD_U32LE\n\
+    4. 1st dimension of all datasets in the same group share the same size\n\
+    5. each group must contain datasets 'run' and 'subrun'\n\
+    6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     printf("Usage: %s [-h|-v|-d|-o outfile] infile\n%s\n", progname, USAGE);
@@ -249,10 +249,10 @@ int main(int argc, char **argv)
 
     if (verbose)
         for (i=0; i<in_list.size(); i++)
-            cout << "input HDF5  file: "<< in_list[i] << '\n'; 
+            cout << "input HDF5 file: "<< in_list[i] << '\n'; 
 
     for (i=0; i<in_list.size(); i++) {
-        /* open file in read-only mode  */
+        /* open file in read-only mode */
         file_id = H5Fopen(in_list[i].c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
         if (file_id < 0) {
             printf("Error at line %d: H5Fopen %s\n",__LINE__,

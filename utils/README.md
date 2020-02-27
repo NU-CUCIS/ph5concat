@@ -1,15 +1,21 @@
 # Utility Programs
 
-* [rechunk](#rechunk)
-* [add_key](#add_key)
-* [sort_file_list](#sort_file_list)
+* [rechunk](#rechunk) -- adjusts chunk settings of all datasets in a given
+  HDF5 file
+* [add_key](#add_key) -- adds partitioning key datasets to all groups
+* [sort_file_list](#sort_file_list) -- sorts file names based on the run and subrun IDs stored in the files
+* [check_seq_incr.cpp](#check_seq_incr.cpp) -- checks contents of partitioning
+  key datasets in all groups for whether their values are organized in a
+  monotonically nondecreasing order
 
 ---
 ## rechunk
 
-* **rechunk** is a utility program running in sequential for adjusting the
-  setting of data chunking for an input HDF5 file produced from the HEP NOvA
-  experiments. The command usage is shown below.
+**rechunk** is a utility program running in sequential. Given an input HDF5
+file, it adjusts the chunk settings for all datasets stored in the file. The
+HDF5 file should come from [NOvA experiments](https://www.hep.ucl.ac.uk/nova/)
+
+Command usage:
   ```
   % ./rechunk -h
   Usage: ./rechunk [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-z level] [-b size] [-o outfile] infile
@@ -40,8 +46,8 @@
       1. zero-sized datasets will be stored in HDF5_COMPACT layout
       2. for non-zero sized datasets, chunking is only applied to 1st dimension
   ```
-  A shell script to run `rechunk` on multiple files in batch is given in
-  `batch.sh`. Example run and output:
+A shell script to run `rechunk` on multiple files in batch is given in
+`batch.sh`. Example run and output:
   ```
   % ./rechunk in.h5
 
@@ -71,31 +77,35 @@
 ---
 ## add_key
 
-* **add_key** is a utility program to be run in sequential. It adds each group
-  a new dataset named `base_name.seq` where 'base_name' is provided through
-  command-line option '-k'. This dataset is referred as partitioning key
-  dataset, to be used to calculate data partitioning for parallel programs that
-  read the file. Its contents are calculated based on three existing datasets
-  in the same group: `run`, `subrun`, and `base_name`. The 3-tuple (run[i],
-  subrun[i], base_name[i]) forms a unique ID. Data elements with the same ID
-  are assigned to the same MPI processes when the file is read in parallel. The
-  3-tuple (run, subrun, base) works similarly to the primary key in relational
-  database. Generation of `base_name.seq` is described as followed.
+**add_key** is a utility program to be run in sequential. Given an HDF5 file
+from NOvA experiments, it adds in each group a new dataset named
+`base_name.seq` where 'base_name' is provided from command-line option '-k'.
+This dataset is referred as partitioning key dataset. It is to be used to
+calculate data partitioning boundaries for parallel programs that read the
+file. The contents of partition ley datasets are calculated based on three
+existing datasets in the same group: `run`, `subrun`, and `base_name`. The
+3-tuple (run[i], subrun[i], base_name[i]) forms a unique ID. Data elements with
+the same ID are assigned to the same MPI processes when the file is read in
+parallel. The 3-tuple (run, subrun, base) works similarly to the primary key in
+relational database to uniquely identify a data element. Generation of
+`base_name.seq` is described as followed.
 
-  Datasets `run`, `subrun`, and `base_name` in group `spill` are used to
-  construct a C++ `unordered_map` as a hash table, where (run[i], subrun[i],
-  base_name[i]) is a hash key. The hash values are the indices of 3-tuples.
-  Because the contents of dataset `base_name` contain a list of unique
-  integers, stored in an increasing order, the hash values are unique for
-  unique 3-tuples. The constructed hash table is then used to create
-  `base_name.seq` in all other groups.  Note the values in `base_name.seq` are
-  consistent among datasets cross all groups. In other words, two dataset
-  elements have the same `base_name.seq` value if their 3-tuples are the same.
+At first, datasets `run`, `subrun`, and `base_name` in group `spill` are used
+to construct a C++ `unordered_map` as a hash table, where (run[i], subrun[i],
+base_name[i]) is a hash key. The hash values are the indices of 3-tuples.
+Because the contents of dataset `base_name` contain a list of unique integers,
+stored in an increasing order, the hash values are unique for unique 3-tuples.
+The constructed hash table is then used to create `base_name.seq` in all other
+groups. Note the values in `base_name.seq` are consistent among datasets cross
+all groups. In other words, two dataset elements have the same `base_name.seq`
+value if their 3-tuples are the same.
 
-  Note the integer numbers in `base_name.seq` in all groups are in a
-  monotonically nondecreasing order. Values can be repeated.
+Note the integer numbers in `base_name.seq` in all groups, except group
+'spill', are in a monotonically nondecreasing order. Values can be repeated.
+In group 'spill', the values in `base_name.seq` will start from 0 and increment
+by 1.
 
-The command usage is shown below.
+Command usage:
   ```
   % ./add_key -h
   Usage: ./add_key [-h|-v] -k base_name file_name
@@ -126,7 +136,7 @@ The command usage is shown below.
       7. data type of the 3 datasets msut be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
-  Example run and output:
+Example run and output:
   ```
   % ./add_key -k evt nd_data_165_files.h5
 
@@ -156,18 +166,18 @@ The command usage is shown below.
 ---
 ## sort_file_list
 
-* **sort_file_list** is a utility program to be run in sequential. It reads
-  a text input file containing a list of HDF5 file names and creates a new
-  output text file containing the same set of HDF5 file names organized in an
-  increasing order based on the run IDs and subrun ID stored in the HDF5 files.
-  The output file can be used as input to the parallel dataset concatenation
-  program `ph5_concat`, so that the data in the concatenated file follows the
-  increasing  order of run and subrun IDs.
+**sort_file_list** is a utility program to be run in sequential. Given  a list
+of NOvA file names, it sorts the file names based on the values of two
+datasets: 'run' and 'subrun'. The sorted file names are stored in a text file.
+The sorting order first follows the run IDs and then subrun IDs. The output
+file can be used as an input to the parallel dataset concatenation program
+`ph5_concat`, so that the concatenated data is organized in  an increasing
+order of run and subrun IDs.
 
-The command usage is shown below.
+Command usage:
   ```
   % ./sort_file_list -h
-  Usage: sort_file_list [-h|-v|-o outfile] infile
+  Usage: ./sort_file_list [-h|-v|-d|-o outfile] infile
     [-h]          print this command usage message
     [-v]          verbose mode (default: off)
     [-d]          debug mode (default: off)
@@ -175,17 +185,17 @@ The command usage is shown below.
     infile        input file name contains a list of HDF5 file names (required)
 
     This utility program re-order the files in infile into a sorted list based
-    on the increasing order of 'run' and 'subrun' IDs. Requirements for the input
-    HDF5 files:
-      1. must contain datasets /spill/run and /spill/subrun
-      2. contains multiple groups at root level
+    on the increasing order of 'run' and 'subrun' IDs. Requirements for the
+    input HDF5 files:
+      1. must contain datasets '/spill/run' and '/spill/subrun'
+      2. may contain multiple groups at root level
       3. each group may contain multiple 2D datasets
-      4. all datasets in the same group share the 1st dimension size
-      5. each group must contain datasets run and subrun'
-      6. data type of datasets run and subrun must be H5T_STD_U32LE
+      4. 1st dimension of all datasets in the same group share the same size
+      5. each group must contain datasets 'run' and 'subrun'
+      6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
-  Example run and output:
+Example run and output:
   ```
   % cat sample_in_list.txt 
   ND/neardet_r00011981_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
@@ -205,3 +215,44 @@ The command usage is shown below.
   ND1/neardet_r00011988_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ND1/neardet_r00011991_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ```
+---
+## check_seq_incr
+
+**check_seq_incr** is a utility program to be run in sequential. Given a NOvA
+HDF5 file that contains partition key datasets, it checks the contents of
+partition key datasets in all groups. It first checks the partition dataset in
+group '/spill', a 1D array of integers, whose values should start from 0 and
+increment by 1. The contents of partition key datasets in all other groups are
+only required to be in a monotonically nondecreasing order, i.e.  may not start
+from 0, may contain repeated values, and may not increment by 1. The name of
+partition dataset is a command-line parameter.
+
+Command usage:
+  ```
+  % ./check_seq_incr -h
+  Usage: ./check_seq_incr [-h|-v|-d name] infile
+    [-h]       print this command usage message
+    [-v]       verbose mode (default: off)
+    [-d name]  partition key dataset name (default: 'evt.seq')
+    infile     name of input HDF5 file (required)
+
+    This utility program checks the contents of dataset 'name' in each group of
+    the input file for whether the values are in a monotonically nondecreasing
+    order. In particular, the partition dataset in group '/spill' is checked
+    for whether the values start from 0 and increment by 1. Datasets in all
+    other groups are checked only for a monotonically nondecreasing order.
+    Requirements for the input HDF5 file:
+      1. contains multiple groups at root level
+      2. each group may contain multiple 2D datasets
+      3. the 1st  dimension of all datasets in the same group share same size
+      4. each group must contain a partition key dataset named 'name'
+    *ph5concat version 1.1.0 of March 1, 2020.
+  ```
+
+Example run:
+  ```
+  % ./check_seq_incr -d evt.seq out.h5
+  All datasets pass the check
+  ```
+
+

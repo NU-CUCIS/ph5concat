@@ -16,11 +16,13 @@ endif
 
 noinst_PROGRAMS = rechunk \
                   add_key \
-                  sort_file_list
+                  sort_file_list \
+                  check_seq_incr
 
 rechunk_SOURCES = rechunk.c
 add_key_SOURCES = add_key.cpp
 sort_file_list_SOURCES = sort_file_list.cpp
+check_seq_incr_SOURCES = check_seq_incr.cpp
 
 EXTRA_DIST = README.md \
              batch.sh
@@ -32,5 +34,7 @@ dist-hook:
 	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/add_key.cpp
 	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/sort_file_list.cpp
 	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/sort_file_list.cpp
+	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/check_seq_incr.cpp
+	$(SED_I) -e "s|_PH5CONCAT_RELEASE_DATE_|@PH5CONCAT_RELEASE_DATE@|g" $(distdir)/check_seq_incr.cpp
 
 .PHONY:

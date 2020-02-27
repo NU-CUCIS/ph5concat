@@ -235,7 +235,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             }
             else if (dims[0] > it_op->chunk_unit_1D) /* large 1D dataset */
                 out_chunk_dims[0] = it_op->chunk_unit_1D;
-            else /* small 1D dataset: one chunk  */
+            else /* small 1D dataset: one chunk */
                 out_chunk_dims[0] = dims[0];
 
             out_chunk_dims[1] = dims[1];
@@ -495,7 +495,7 @@ int check_h5_objects(const char *filename, hid_t fid)
     for (ii=0; ii<howmany; ii++) {
          char *type_name="";
          ot = H5Iget_type(objs[ii]);
-              if (ot == H5I_FILE)      continue; /*  type_name = "H5I_FILE"; */
+              if (ot == H5I_FILE)      continue; /* type_name = "H5I_FILE"; */
          else if (ot == H5I_GROUP)     type_name = "H5I_GROUP";
          else if (ot == H5I_DATATYPE)  type_name = "H5I_DATATYPE";
          else if (ot == H5I_DATASPACE) type_name = "H5I_DATASPACE";
@@ -635,7 +635,7 @@ int main(int argc, char **argv)
 */
     it_op.raw_chunk_cache = raw_chunk_cache;
 
-    /* open input file in read-only mode  */
+    /* open input file in read-only mode */
     fd_in = H5Fopen(infile, H5F_ACC_RDONLY, fapl_id);
     if (fd_in < 0) {
         sprintf(msg, "Can't open input file %s\n", infile);
@@ -661,7 +661,7 @@ int main(int argc, char **argv)
         hsize_t meta_block_size;
         err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
         if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
-        printf("metadata block size is set  to %lld\n",meta_block_size);
+        printf("metadata block size is set to %lld\n",meta_block_size);
     }
 
     GET_TIMER(ts, te, timing[1])

@@ -211,7 +211,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
             if (in_layout != H5D_COMPACT) it_op->num_change_chunk++;
         }
-        else {
+        else { /* not a 0-dize dataset */
             if (it_op->true_1d && dims[1] == 1) { /* 1D dataset */
                 /* define a true 1D dataset */
                 err = H5Sclose(space_id);
@@ -526,16 +526,18 @@ usage(char *progname)
   [-b size]    I/O buffer size in bytes (default: 1 GiB)\n\
   [-o outfile] output file name (default: out.h5)\n\
   infile       input file name (required and cannot be the same as output file)\n\n\
-  This utility program adjusts chunk setting of an input HDF5 file and save\n\
-  to an output file.\n\n\
+  This utility program copied an input HDF5 file to a new file using an\n\
+  adjusted chunk settings in the new file.\n\n\
   Requirements of the input HDF5 file:\n\
     1. contains multiple groups only at root level\n\
     2. each group contains multiple 2D datasets\n\
     3. true-1D datasets are those whose 2nd dimension size is 1\n\
     4. true-2D datasets are those whose 2nd dimension size is larger than 1\n\n\
   Output HDF5 file:\n\
-    1. zero-sized datasets will be stored in HDF5_COMPACT layout\n\
-    2. for non-zero sized datasets, chunking is only applied to 1st dimension\n\n\
+    1. zero-sized datasets will be stored in H5D_COMPACT layout\n\
+    2. for non-zero sized datasets, chunking is only applied to 1st dimension\n\
+    3. for true-1D datasets, new chunk dimensions use value from -c option\n\
+    4. for true-2D datasets, new chunk dimensions use value from -C option\n\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     printf("Usage: %s [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-z level] [-b size] [-o outfile] infile\n%s\n",

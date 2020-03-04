@@ -12,8 +12,10 @@
 ## rechunk
 
 **rechunk** is a utility program running in sequential. Given an input HDF5
-file, it adjusts the chunk settings for all datasets stored in the file. The
-HDF5 file should come from [NOvA experiments](https://www.hep.ucl.ac.uk/nova/)
+file, it copies all data groups and datsets in the input file to a new file
+where the datasets in the new file use an adjust chunk setting. The new chunk
+settings are described below in the command usage. The input HDF5 file should
+come from [NOvA experiments](https://www.hep.ucl.ac.uk/nova/)
 
 Command usage:
   ```
@@ -33,8 +35,8 @@ Command usage:
     [-o outfile] output file name (default: out.h5)
     infile       input file name (required and cannot be the same as output file)
 
-    This utility program adjusts chunk setting of an input HDF5 file and save
-    to an output file.
+    This utility program copies an input HDF5 file to a new file where the
+    datasets in the new file uses an adjusted chunk setting.
 
     Requirements of the input HDF5 file:
       1. contains multiple groups only at root level
@@ -43,8 +45,11 @@ Command usage:
       4. true-2D datasets are those whose 2nd dimension size is larger than 1
 
     Output HDF5 file:
-      1. zero-sized datasets will be stored in HDF5_COMPACT layout
+      1. zero-sized datasets will be stored in H5D_COMPACT layout
       2. for non-zero sized datasets, chunking is only applied to 1st dimension
+      3. for true-1D datasets, new chunk dimensions use value from -c option
+      4. for true-2D datasets, new chunk dimensions use value from -C option
+    *ph5concat version 1.1.0 of March 1, 2020.
   ```
 A shell script to run `rechunk` on multiple files in batch is given in
 `batch.sh`. Example run and output:

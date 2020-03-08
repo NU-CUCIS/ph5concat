@@ -128,7 +128,6 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
 }
 
 /*----< add_seq() >---------------------------------------------------------*/
-/* call back function used in H5Ovisit() */
 static
 herr_t add_seq(bool        dry_run,
                hid_t       file_id,
@@ -483,9 +482,15 @@ int main(int argc, char **argv)
     it_op.grp_names = (char**) malloc(num_orig_groups * sizeof(char*));
 
     /* Iterate all objects to collect names of all group */
+#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
+    err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
+                    &it_op, H5O_INFO_ALL);
+    if (err < 0) HANDLE_ERROR("H5Ovisit3")
+#else
     err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
                    &it_op);
     if (err < 0) HANDLE_ERROR("H5Ovisit")
+#endif
     if (it_op.err < 0) HANDLE_ERROR("H5Ovisit")
 
     GET_TIMER(ts, te, timing[1])

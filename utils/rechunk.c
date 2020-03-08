@@ -672,8 +672,13 @@ int main(int argc, char **argv)
     it_op.io_buf = (void*) malloc(it_op.io_buf_size);
 
     /* Iterate all objects and perform chunking adjustment */
+#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
+    err = H5Ovisit3(fd_in, H5_INDEX_NAME, H5_ITER_NATIVE, rechunk, &it_op, H5O_INFO_ALL);
+    if (err < 0) HANDLE_ERROR("H5Ovisit3")
+#else
     err = H5Ovisit(fd_in, H5_INDEX_NAME, H5_ITER_NATIVE, rechunk, &it_op);
     if (err < 0) HANDLE_ERROR("H5Ovisit")
+#endif
     if (it_op.err < 0) HANDLE_ERROR("H5Ovisit")
 
     GET_TIMER(ts, te, timing[2])

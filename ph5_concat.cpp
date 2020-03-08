@@ -216,8 +216,13 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
         if (file_id < 0) HANDLE_ERROR("H5Fopen")
 
         /* iterate all data objects to collect their metadata */
+#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
+        err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this, H5O_INFO_ALL);
+        if (err < 0) HANDLE_ERROR("H5Ovisit3")
+#else
         err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this);
         if (err < 0) HANDLE_ERROR("H5Ovisit")
+#endif
 
         /* if partition key dataset is to be added and group /spill cannot be
          * found, then error out.

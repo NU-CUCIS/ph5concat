@@ -55,6 +55,7 @@ parallel concatenater is important.
                --with-hdf5=$HOME/HDF5/1.10.5 \
                CFLAGS="-O2 -DNDEBUG" \
                CXXFLAGS="-O2 -DNDEBUG" \
+               LIBS="-ldl -lz" \
                --enable-profiling
    ```
    * Option '--enable-profiling' enables timing measurement for internal

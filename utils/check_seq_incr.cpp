@@ -247,8 +247,13 @@ int main(int argc, char **argv)
 
     /* Iterate all objects in the input file */
     it_op.dname = dname;
+#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
+    err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_order, &it_op, H5O_INFO_ALL);
+    if (err < 0) HANDLE_ERROR("H5Ovisit3", dname)
+#else
     err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, check_order, &it_op);
     if (err < 0) HANDLE_ERROR("H5Ovisit", dname)
+#endif
     if (it_op.err < 0) HANDLE_ERROR("H5Ovisit", dname)
 
     err = H5Fclose(file_id);

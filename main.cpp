@@ -460,6 +460,58 @@ int main(int argc, char **argv)
         printf("End-to-end:                          %9.4f\n", step_time[7]);
         printf("\n");
     }
+
+#if defined HAS_H5GET_ALLOC_STATS && HAS_H5GET_ALLOC_STATS
+    unsigned long long total_alloc_bytes, max_ull, min_ull, avg_ull;
+    size_t curr_alloc_bytes, peak_alloc_bytes, max_block_size;
+    size_t total_alloc_blocks_count, curr_alloc_blocks_count;
+    size_t peak_alloc_blocks_count, zd[6], max_zd[6], min_zd[6], avg_zd[6];
+
+    err = H5get_alloc_stats(&total_alloc_bytes, &curr_alloc_bytes,
+			    &peak_alloc_bytes, &max_block_size,
+			    &total_alloc_blocks_count,
+                            &curr_alloc_blocks_count,
+                            &peak_alloc_blocks_count);
+
+    MPI_Reduce(&total_alloc_bytes, &min_ull, 1, MPI_UNSIGNED_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&total_alloc_bytes, &max_ull, 1, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&total_alloc_bytes, &avg_ull, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    min_ull /= 1048576;
+    max_ull /= 1048576;
+    avg_ull /= nprocs * 1048576;
+    zd[0] = curr_alloc_bytes;
+    zd[1] = peak_alloc_bytes;
+    zd[2] = max_block_size;
+    zd[3] = total_alloc_blocks_count;
+    zd[4] = curr_alloc_blocks_count;
+    zd[5] = peak_alloc_blocks_count;
+    MPI_Reduce(zd, &min_zd, 6, MPI_UNSIGNED_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(zd, &max_zd, 6, MPI_UNSIGNED_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(zd, &avg_zd, 6, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    for (int i=0; i<3; i++) {
+        min_zd[i] /= 1048576;
+        max_zd[i] /= 1048576;
+        avg_zd[i] /= nprocs * 1048576;
+    }
+    for (int i=3; i<6; i++) {
+        min_zd[i] /= 1024;
+        max_zd[i] /= 1024;
+        avg_zd[i] /= nprocs * 1024;
+    }
+
+    if (!opt.quiet && rank == 0) { /* only rank 0 reports timings */
+        printf("-------------------------------------------------------------\n");
+        printf("Memory footprints (min, max, avg among all processes):\n");
+        printf("total_alloc_bytes      (MiB) min=%8llu max=%8llu avg=%8llu\n",min_ull,max_ull,avg_ull);
+        // printf("curr_alloc_bytes       (MiB) min=%8zd max=%8zd avg=%8zd\n",min_zd[0],max_zd[0],avg_zd[0]);
+        printf("peak_alloc_bytes       (MiB) min=%8zd max=%8zd avg=%8zd\n",min_zd[1],max_zd[1],avg_zd[1]);
+        printf("max_block_size         (MiB) min=%8zd max=%8zd avg=%8zd\n",min_zd[2],max_zd[2],avg_zd[2]);
+        printf("total_alloc_blocks_count (K) min=%8zd max=%8zd avg=%8zd\n",min_zd[3],max_zd[3],avg_zd[3]);
+        // printf("curr_alloc_blocks_count  (K) min=%8zd max=%8zd avg=%8zd\n",min_zd[4],max_zd[4],avg_zd[4]);
+        printf("peak_alloc_blocks_count  (K) min=%8zd max=%8zd avg=%8zd\n",min_zd[5],max_zd[5],avg_zd[5]);
+        printf("-------------------------------------------------------------\n");
+    }
+#endif
 #endif
 
 prog_exit:

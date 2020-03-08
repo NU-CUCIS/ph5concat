@@ -264,9 +264,15 @@ int main(int argc, char **argv)
             /* Iterate all objects to collect run and subrun IDs */
             it_op.is_set_run = false;
             it_op.is_set_subrun = false;
+#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
+            err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, get_IDs,
+                            &it_op, H5O_INFO_ALL);
+            if (err < 0) HANDLE_ERROR("H5Ovisit3")
+#else
             err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, get_IDs,
                            &it_op);
             if (err < 0) HANDLE_ERROR("H5Ovisit")
+#endif
             if (it_op.err < 0) HANDLE_ERROR("H5Ovisit")
 
             if (verbose)

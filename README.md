@@ -103,15 +103,17 @@ parallel concatenater is important.
     H5Dwrite. In this case, users may encounter out-of-memory errors.
   + I/O strategies: two I/O strategies (1 and 2) are currently supported. Both
     strategies share the same method for reading and writing the 1D datasets.
-    At first, input files are assigned disjointly and evenly among all
-    processes and each process reads 1D datasets only from the assigned files.
-    Once 1D datasets are read, they are written to the output files using
-    collective I/O. The difference between staretgies 1 and 2 are for reading
-    and writing the 2D datasets. For strategy 1, each process reads only the
-    assigned file (i.e. no shared-file reads) and then all processes
-    collectively write to the output file. For strategy 2, all 2D datasets are
-    read by all processes collectively (i.e. shared-file reads) and then all
-    processes collectively write to the output file.
+    For 1D datasets, input files are first assigned disjointly and evenly among all
+    processes. Each process reads each 1D dataset entirely from the assigned files
+    and writes it to the output files using collective I/O. The difference between
+    staretgies 1 and 2 are for the 2D datasets. In strategy 1, all processes open
+    all input files collectively using MPI-IO and read all individual 2D datasets
+    collectively (i.e. shared-file reads), followed by all processes collectively
+    writing individual datasets to the output file. In this strategy, all reads
+    and writes are collective for each dataset. In strategy 2, each process reads
+    datasets only from the disjointly assigned file (i.e. no shared-file reads)
+    and then all processes collectively write each of the datasets to the output
+    file. In this strategy, reads are independent but writes are collective.
 
 ## Sample input and output files
 * There are four sample input files provided in folder `examples`.

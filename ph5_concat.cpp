@@ -257,7 +257,7 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
          * /spill
          */
 	if (groups[spill_grp_no].key_base == NULL) {
-            fprintf(stderr, "Error: partiition key base dataset '/spill/%s' coonnot be found\n", part_key_base.c_str());
+            fprintf(stderr, "Error: partiition key base dataset '/spill/%s' cannot be found\n", part_key_base.c_str());
             err_exit = -1;
             goto fn_exit;
         }

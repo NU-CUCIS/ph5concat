@@ -317,7 +317,7 @@ int main(int argc, char **argv)
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
-            PRN_TIMER(step_time[3], "Writ partition key datasets")
+            PRN_TIMER(step_time[3], "Write partition key datasets")
         }
 
         err = concat.close_input_files();

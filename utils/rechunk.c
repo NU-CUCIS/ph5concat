@@ -59,6 +59,7 @@ struct op_data {
     int          raw_chunk_cache; /* to enable chunk caching for raw data */
     hsize_t      chunk_unit_1D;   /* chunk for true-1D datasets */
     hsize_t      chunk_unit_2D;   /* chunk for true-2D datasets */
+    hsize_t      chunk_unit_MB;   /* chunk base size in MiB for 1D datasets */
     unsigned int gzip_level;      /* GZIP compression level */
     hsize_t      num_1D_dset;     /* number of 1D datasets */
     hsize_t      num_2D_dset;     /* number of 2D datasets */
@@ -211,7 +212,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
             if (in_layout != H5D_COMPACT) it_op->num_change_chunk++;
         }
-        else { /* not a 0-dize dataset */
+        else { /* not a 0-size dataset */
             if (it_op->true_1d && dims[1] == 1) { /* 1D dataset */
                 /* define a true 1D dataset */
                 err = H5Sclose(space_id);
@@ -233,8 +234,12 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
                 if (dims[0] < it_op->chunk_unit_2D)
                     out_chunk_dims[0] = dims[0];
             }
-            else if (dims[0] > it_op->chunk_unit_1D) /* large 1D dataset */
-                out_chunk_dims[0] = it_op->chunk_unit_1D;
+            else if (dims[0] > it_op->chunk_unit_1D) { /* large 1D dataset */
+                if (it_op->chunk_unit_MB > 0)
+                    out_chunk_dims[0] = it_op->chunk_unit_MB * 1048576 / type_size;
+                else
+                    out_chunk_dims[0] = it_op->chunk_unit_1D;
+            }
             else /* small 1D dataset: one chunk */
                 out_chunk_dims[0] = dims[0];
 
@@ -520,8 +525,9 @@ usage(char *progname)
   [-r]         disable chunk caching for raw data (default: enable)\n\
   [-s]         re-define zero-sized datasets as scalars (default: no)\n\
   [-t]         define true 1D dataset (default: no)\n\
-  [-c size]    chunk size along 1st dimension for true-1D dataset (default: 1048576)\n\
-  [-C size]    chunk size along 1st dimension for true-2D dataset (default: 128)\n\
+  [-c size]    chunk size along dimension 1 for true-1D datasets (default: 1048576)\n\
+  [-C size]    chunk size along dimension 0 for true-2D datasets (default: 128)\n\
+  [-M size]    chunk base size in MiB for true-1D datasets (overwrites -c option)\n\
   [-z level]   GZIP compression level (default: 6)\n\
   [-b size]    I/O buffer size in bytes (default: 1 GiB)\n\
   [-o outfile] output file name (default: out.h5)\n\
@@ -540,7 +546,7 @@ usage(char *progname)
     4. for true-2D datasets, new chunk dimensions use value from -C option\n\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-z level] [-b size] [-o outfile] infile\n%s\n",
+    printf("Usage: %s [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-M size] [-z level] [-b size] [-o outfile] infile\n%s\n",
            progname, USAGE);
 }
 
@@ -563,8 +569,9 @@ int main(int argc, char **argv)
     it_op.zero_as_scalar = 0;       /* define zero-sized datasets as scalars */
     it_op.true_1d        = 0;       /* define true 1D datasets */
     it_op.gzip_level     = 6;       /* default GZIP compression level */
-    it_op.chunk_unit_1D  = 1048576; /* default chunk size */
-    it_op.chunk_unit_2D  = 128;     /* default chunk size */
+    it_op.chunk_unit_1D  = 1048576; /* default chunk size for 1D datasets */
+    it_op.chunk_unit_2D  = 128;     /* default chunk size for 2D datasets */
+    it_op.chunk_unit_MB  = 0;       /* chunk base size in MiB for 1D datasets */
     it_op.io_buf_size    = 1073741824; /* default I/O buffer size */
     it_op.num_1D_dset    = 0;     /* number of 1D datasets */
     it_op.num_2D_dset    = 0;     /* number of 2D datasets */
@@ -573,7 +580,7 @@ int main(int argc, char **argv)
     it_op.num_change_chunk = 0;   /* number of datasets with same chunking */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvdrstc:z:o:c:C:b:")) != -1)
+    while ((c = getopt(argc, argv, "hvdrstc:z:o:c:C:M:b:")) != -1)
         switch(c) {
             case 'h': usage(argv[0]);
                       err_exit = -1;
@@ -591,6 +598,8 @@ int main(int argc, char **argv)
             case 'c': it_op.chunk_unit_1D = (hsize_t)(atoi(optarg));
                       break;
             case 'C': it_op.chunk_unit_2D = (hsize_t)(atoi(optarg));
+                      break;
+            case 'M': it_op.chunk_unit_MB = (hsize_t)(atoi(optarg));
                       break;
             case 'z': it_op.gzip_level = (unsigned int)(atoi(optarg));
                       break;
@@ -673,10 +682,10 @@ int main(int argc, char **argv)
 
     /* Iterate all objects and perform chunking adjustment */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
-    err = H5Ovisit3(fd_in, H5_INDEX_NAME, H5_ITER_NATIVE, rechunk, &it_op, H5O_INFO_ALL);
+    err = H5Ovisit3(fd_in, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, rechunk, &it_op, H5O_INFO_ALL);
     if (err < 0) HANDLE_ERROR("H5Ovisit3")
 #else
-    err = H5Ovisit(fd_in, H5_INDEX_NAME, H5_ITER_NATIVE, rechunk, &it_op);
+    err = H5Ovisit(fd_in, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, rechunk, &it_op);
     if (err < 0) HANDLE_ERROR("H5Ovisit")
 #endif
     if (it_op.err < 0) HANDLE_ERROR("H5Ovisit")
@@ -706,29 +715,32 @@ fn_exit:
 
 #if defined PROFILE && PROFILE
     if (err_exit == 0) {
-        printf("In-memory I/O                  = %s\n",
+        printf("In-memory I/O                        = %s\n",
                (in_memory_io)?"enabled":"disabled");
-        printf("Chunk caching for raw data     = %s\n",
+        printf("Chunk caching for raw data           = %s\n",
                (raw_chunk_cache)?"enabled":"disabled");
-        printf("I/O buffer size                = %zd bytes\n", it_op.io_buf_size);
-        printf("number of groups in the file   = %llu\n", grp_info.nlinks);
-        printf("total number of 1D datasets    = %llu\n", it_op.num_1D_dset);
-        printf("total number of 2D datasets    = %llu\n", it_op.num_2D_dset);
-        printf("no. non-zero 1D datasets       = %llu\n", it_op.num_nonzero_1D);
-        printf("no. non-zero 2D datasets       = %llu\n", it_op.num_nonzero_2D);
-        printf("no. datasets chunking changed  = %llu\n", it_op.num_change_chunk);
+        printf("I/O buffer size                      = %zd bytes\n", it_op.io_buf_size);
+        printf("number of groups in the file         = %llu\n", grp_info.nlinks);
+        printf("total number of 1D datasets          = %llu\n", it_op.num_1D_dset);
+        printf("total number of 2D datasets          = %llu\n", it_op.num_2D_dset);
+        printf("no. non-zero 1D datasets             = %llu\n", it_op.num_nonzero_1D);
+        printf("no. non-zero 2D datasets             = %llu\n", it_op.num_nonzero_2D);
+        printf("no. datasets chunking changed        = %llu\n", it_op.num_change_chunk);
+        printf("0th  dim  chunk size for 2D datasets = %llu\n", it_op.chunk_unit_2D);
+        printf("1st  dim  chunk size for 1D datasets = %llu\n", it_op.chunk_unit_1D);
+        printf("MiB-based chunk size for 1D datasets = %llu MiB\n", it_op.chunk_unit_MB);
         printf("-------------------------------------------------------\n");
-        printf("Input  file open   time        = %7.2f sec\n", timing[0]);
-        printf("Output file create time        = %7.2f sec\n", timing[1]);
-        printf("Re-chunk time                  = %7.2f sec\n", timing[2]);
-        printf("  Re-chunk dataset open   time = %7.2f sec\n", dopen_time);
-        printf("  Re-chunk dataset create time = %7.2f sec\n", dcreate_time);
-        printf("  Re-chunk dataset read   time = %7.2f sec\n", dread_time);
-        printf("  Re-chunk dataset write  time = %7.2f sec\n", dwrite_time);
-        printf("  Re-chunk dataset close  time = %7.2f sec\n", dclose_time);
-        printf("Output file close time         = %7.2f sec\n", timing[3]);
+        printf("Input  file open   time              = %7.2f sec\n", timing[0]);
+        printf("Output file create time              = %7.2f sec\n", timing[1]);
+        printf("Re-chunk time                        = %7.2f sec\n", timing[2]);
+        printf("  Re-chunk dataset open   time       = %7.2f sec\n", dopen_time);
+        printf("  Re-chunk dataset create time       = %7.2f sec\n", dcreate_time);
+        printf("  Re-chunk dataset read   time       = %7.2f sec\n", dread_time);
+        printf("  Re-chunk dataset write  time       = %7.2f sec\n", dwrite_time);
+        printf("  Re-chunk dataset close  time       = %7.2f sec\n", dclose_time);
+        printf("Output file close time               = %7.2f sec\n", timing[3]);
         printf("-------------------------------------------------------\n");
-        printf("Total time                     = %7.2f sec\n",
+        printf("Total time                           = %7.2f sec\n",
                timing[0] + timing[1] + timing[2] + timing[3]);
     }
 #endif

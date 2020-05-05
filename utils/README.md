@@ -20,16 +20,17 @@ come from [NOvA experiments](https://www.hep.ucl.ac.uk/nova/)
 Command usage:
   ```
   % ./rechunk -h
-  Usage: ./rechunk [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-z level] [-b size] [-o outfile] infile
+  Usage: ./rechunk [-h|-v|-d|-r|-s|-t] [-c size] [-C size] [-M size] [-z level] [-b size] [-o outfile] infile
 
     [-h]         print this command usage message
     [-v]         verbose mode (default: off)
     [-d]         disable in-memory I/O (default: enable)
     [-r]         disable chunk caching for raw data (default: enable)
-    [-s]         re-define zero-sized datasets as scalars (default: no)\n\
-    [-t]         define true 1D dataset (default: no)s\n\
+    [-s]         re-define zero-sized datasets as scalars (default: no)
+    [-t]         define true 1D dataset (default: no)
     [-c size]    chunk size along 1st dimension for true-1D dataset (default: 1048576)
     [-C size]    chunk size along 1st dimension for true-2D dataset (default: 128)
+    [-M size]    chunk base size in MiB for true-1D datasets (overwrites -c option)
     [-z level]   GZIP compression level (default: 6)
     [-b size]    I/O buffer size in bytes (default: 1 GiB)
     [-o outfile] output file name (default: out.h5)
@@ -54,29 +55,32 @@ Command usage:
 A shell script to run `rechunk` on multiple files in batch is given in
 `batch.sh`. Example run and output:
   ```
-  % ./rechunk in.h5
+  % ./rechunk -M 1 in.h5
 
-  In-memory I/O                  = enabled
-  Chunk caching for raw data     = enabled
-  I/O buffer size                = 1073741824 bytes
-  number of groups in the file   = 999
-  total number of 1D datasets    = 17935
-  total number of 2D datasets    = 8
-  no. non-zero 1D datasets       = 2779
-  no. non-zero 2D datasets       = 6
-  no. datasets chunking changed  = 43
+  In-memory I/O                        = enabled
+  Chunk caching for raw data           = enabled
+  I/O buffer size                      = 1073741824 bytes
+  number of groups in the file         = 999
+  total number of 1D datasets          = 15965
+  total number of 2D datasets          = 8
+  no. non-zero 1D datasets             = 2573
+  no. non-zero 2D datasets             = 6
+  no. datasets chunking changed        = 21
+  0th  dim  chunk size for 2D datasets = 128
+  1st  dim  chunk size for 1D datasets = 1048576
+  MiB-based chunk size for 1D datasets = 1 MiB
   -------------------------------------------------------
-  Input  file open   time        =    0.12 sec
-  Output file create time        =    0.10 sec
-  Re-chunk time                  =   20.44 sec
-    Re-chunk dataset open   time =    1.53 sec
-    Re-chunk dataset create time =    2.06 sec
-    Re-chunk dataset read   time =    2.12 sec
-    Re-chunk dataset write  time =   13.18 sec
-    Re-chunk dataset close  time =    0.10 sec
-  Output file close time         =    0.43 sec
+  Input  file open   time              =    0.05 sec
+  Output file create time              =    0.04 sec
+  Re-chunk time                        =   10.35 sec
+    Re-chunk dataset open   time       =    1.35 sec
+    Re-chunk dataset create time       =    1.81 sec
+    Re-chunk dataset read   time       =    0.86 sec
+    Re-chunk dataset write  time       =    4.82 sec
+    Re-chunk dataset close  time       =    0.23 sec
+  Output file close time               =    0.18 sec
   -------------------------------------------------------
-  Total time                     =   21.09 sec
+  Total time                           =   10.62 sec
   ```
 
 ---

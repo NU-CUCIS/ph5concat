@@ -45,6 +45,7 @@ struct DSInfo_t {
     hsize_t       global_dims[2];/* dim sizes, aggregated from all files */
     hsize_t       chunk_dims[2]; /* chunk dimension sizes */
     hid_t         type_id;       /* datatype ID */
+    H5T_class_t   type_class;    /* datatype class */
     size_t        type_size;     /* size of data element */
     H5D_layout_t  layout;        /* COMPACT, CONTIGUOUS, CHUNK */
     hid_t         out_dset_id;   /* output HDF5 dataset ID */

@@ -45,8 +45,8 @@ double wtime(void)
 #define GET_TIMER(ts, te, t)
 #endif
 
-#define HANDLE_ERROR(msg) { \
-    printf("Error at line %d: %s\n",__LINE__, msg); \
+#define HANDLE_ERROR(msg,name) { \
+    printf("Error at line %d: func %s on %s\n",__LINE__,msg,name); \
     err_exit = -1; \
     goto fn_exit; \
 }
@@ -98,11 +98,11 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
         /* create a group in output file with the same name */
         hid_t grp_id = H5Gcreate1(fd_out, name, 0);
-        if (grp_id < 0) HANDLE_ERROR("H5Gcreate1")
+        if (grp_id < 0) HANDLE_ERROR("H5Gcreate1", name)
 
         /* close group */
         err = H5Gclose(grp_id);
-        if (err < 0) HANDLE_ERROR("H5Gclose")
+        if (err < 0) HANDLE_ERROR("H5Gclose", name)
     }
     else if (info->type == H5O_TYPE_DATASET) {
         /* create a dataset in output file with the same name */
@@ -110,6 +110,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
         hid_t in_dset, out_dset, space_id, type_id, r_dcpl, w_dcpl;
         hsize_t dims[2], in_chunk_dims[2], out_chunk_dims[2];
         H5D_layout_t in_layout;
+        H5T_class_t type_class;
 
         if (verbose) printf("input daatset name=%s\n",name);
 
@@ -117,66 +118,72 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
         if (! it_op->raw_chunk_cache) {
             /* create access property for read */
             hid_t r_dapl = H5Pcreate(H5P_DATASET_ACCESS);
-            if (r_dapl < 0) HANDLE_ERROR("H5Pcreate r_dapl")
+            if (r_dapl < 0) HANDLE_ERROR("H5Pcreate r_dapl", name)
 
             /* if a dataset is read by whole chunks and there is no need to
              * access the chunks more than once on the disk, the chunk cache is
              * not needed and can be set to 0 if there is a shortage of memory.
              */
             err = H5Pset_chunk_cache(r_dapl, 0, 0, 1.0);
-            if (err < 0) HANDLE_ERROR("H5Pset_chunk_cache r_dapl")
+            if (err < 0) HANDLE_ERROR("H5Pset_chunk_cache r_dapl", name)
 
             /* Open input dataset */
             in_dset = H5Dopen(loc_id, name, r_dapl);
-            if (in_dset < 0) HANDLE_ERROR("H5Dopen")
+            if (in_dset < 0) HANDLE_ERROR("H5Dopen", name)
 
             err = H5Pclose(r_dapl);
-            if (err < 0) HANDLE_ERROR("H5Pclose r_dapl")
+            if (err < 0) HANDLE_ERROR("H5Pclose r_dapl", name)
         }
         else {
             /* Open input dataset */
             in_dset = H5Dopen(loc_id, name, H5P_DEFAULT);
-            if (in_dset < 0) HANDLE_ERROR("H5Dopen")
+            if (in_dset < 0) HANDLE_ERROR("H5Dopen", name)
         }
 
         /* Retrieve input dataset's creation property list */
         r_dcpl = H5Dget_create_plist(in_dset);
-        if (r_dcpl < 0) HANDLE_ERROR("H5Dget_create_plist")
+        if (r_dcpl < 0) HANDLE_ERROR("H5Dget_create_plist", name)
 
         /* Retrieve input dataset's data layout */
         in_layout = H5Pget_layout(r_dcpl);
-        if (in_layout < 0) HANDLE_ERROR("H5Pget_layout")
+        if (in_layout < 0) HANDLE_ERROR("H5Pget_layout", name)
 
         /* Retrieve input dataset's data chunk dimensions */
         if (in_layout == H5D_CHUNKED) {
             err = H5Pget_chunk(r_dcpl, 2, in_chunk_dims);
-            if (err < 0) HANDLE_ERROR("H5Pget_chunk")
+            if (err < 0) HANDLE_ERROR("H5Pget_chunk", name)
 
             assert(1 == H5Pget_nfilters(r_dcpl));
         }
+
+        /* close input dataset creation property */
         err = H5Pclose(r_dcpl);
-        if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl")
+        if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl", name)
 
         /* Retrieve input dataset's data type */
         type_id = H5Dget_type(in_dset);
-        if (type_id < 0) HANDLE_ERROR("H5Dget_type")
+        if (type_id < 0) HANDLE_ERROR("H5Dget_type", name)
 
         /* Retrieve data type size */
         type_size = H5Tget_size(type_id);
-        if (type_size == 0) HANDLE_ERROR("H5Tget_size")
+        if (type_size == 0) HANDLE_ERROR("H5Tget_size", name)
+
+        /* Retrieve data type class */
+        type_class = H5Tget_class(type_id);
+        if (type_class < 0) HANDLE_ERROR("H5Tget_class", name);
 
         /* Open input dataset's space */
         space_id = H5Dget_space(in_dset);
-        if (space_id < 0) HANDLE_ERROR("H5Dget_space")
+        if (space_id < 0) HANDLE_ERROR("H5Dget_space", name)
 
         /* Retrieve number of dimensions */
         int ndims = H5Sget_simple_extent_ndims(space_id);
-        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims")
+        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims", name)
         assert(ndims == 2);
 
         /* retrieve dimension sizes */
         ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
-        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims")
+        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims", name)
 
         assert(dims[0] >= 0);
         assert(dims[1] >= 0);
@@ -189,17 +196,25 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
         /* create dataset creation property for new dataset */
         w_dcpl = H5Pcreate(H5P_DATASET_CREATE);
-        if (w_dcpl < 0) HANDLE_ERROR("H5Pcreate")
+        if (w_dcpl < 0) HANDLE_ERROR("H5Pcreate", name)
+
+        /* Never fill in the dataset in advance except H5T_STRING, as
+         * HDF5 requires fill mode enabled for H5T_STRING datasets.
+         */
+        if (type_class != H5T_STRING) {
+            err = H5Pset_fill_time(w_dcpl, H5D_FILL_TIME_NEVER);
+            if (err < 0) HANDLE_ERROR("H5Pset_fill_time", name)
+        }
 
         /* For new dataset, determine if use chunk or compact layout */
         if (dims[0] == 0 || dims[1] == 0) { /* 0-size dataset */
             /* use COMPACT layout */
             err = H5Pset_layout(w_dcpl, H5D_COMPACT);
-            if (err < 0) HANDLE_ERROR("H5Pset_layout")
+            if (err < 0) HANDLE_ERROR("H5Pset_layout", name)
 
             /* do not reuse data space */
             err = H5Sclose(space_id);
-            if (err < 0) HANDLE_ERROR("H5Sclose")
+            if (err < 0) HANDLE_ERROR("H5Sclose", name)
 
             if (it_op->zero_as_scalar)
                 /* Define zero-sized datasets as scalars. */
@@ -208,7 +223,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
                 /* use fixed-size dimensions */
                 space_id = H5Screate_simple(2, dims, NULL);
 
-            if (space_id < 0) HANDLE_ERROR("H5Screate_simple")
+            if (space_id < 0) HANDLE_ERROR("H5Screate_simple", name)
 
             if (in_layout != H5D_COMPACT) it_op->num_change_chunk++;
         }
@@ -216,18 +231,14 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             if (it_op->true_1d && dims[1] == 1) { /* 1D dataset */
                 /* define a true 1D dataset */
                 err = H5Sclose(space_id);
-                if (err < 0) HANDLE_ERROR("H5Sclose")
+                if (err < 0) HANDLE_ERROR("H5Sclose", name)
                 space_id = H5Screate_simple(1, dims, NULL);
-                if (space_id < 0) HANDLE_ERROR("H5Screate_simple")
+                if (space_id < 0) HANDLE_ERROR("H5Screate_simple", name)
             }
 
             /* use CHUNK layout */
             err = H5Pset_deflate(w_dcpl, it_op->gzip_level);
-            if (err < 0) HANDLE_ERROR("H5Pset_deflate")
-
-            /* Never fill in the chunk in advance. */
-            err = H5Pset_fill_time(w_dcpl, H5D_FILL_TIME_NEVER);
-            if (err < 0) HANDLE_ERROR("H5Pset_fill_time")
+            if (err < 0) HANDLE_ERROR("H5Pset_deflate", name)
 
             if (dims[1] > 1) { /* 2D dataset */
                 out_chunk_dims[0] = it_op->chunk_unit_2D;
@@ -250,50 +261,50 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             else
                 err = H5Pset_chunk(w_dcpl, 2, out_chunk_dims);
 
-            if (err < 0) HANDLE_ERROR("H5Pset_chunk")
+            if (err < 0) HANDLE_ERROR("H5Pset_chunk", name)
         }
 
         if (! it_op->raw_chunk_cache) {
             /* write access property */
             hid_t w_dapl = H5Pcreate(H5P_DATASET_ACCESS);
-            if (w_dapl < 0) HANDLE_ERROR("H5Pcreate w_dapl")
+            if (w_dapl < 0) HANDLE_ERROR("H5Pcreate w_dapl", name)
 
             /* As all chunks will be accessed only once, disable write chunk
              * caching in hope to skip some HDF5 internal memcpy due to
              * caching.
              */
             err = H5Pset_chunk_cache(w_dapl, 0, 0, 1.0);
-            if (err < 0) HANDLE_ERROR("H5Pset_chunk_cache w_dapl")
+            if (err < 0) HANDLE_ERROR("H5Pset_chunk_cache w_dapl", name)
 
             /* create output dataset */
             out_dset = H5Dcreate(fd_out, name, type_id, space_id, H5P_DEFAULT,
                                  w_dcpl, w_dapl);
-            if (out_dset < 0) HANDLE_ERROR("H5Dcreate")
+            if (out_dset < 0) HANDLE_ERROR("H5Dcreate", name)
 
             err = H5Pclose(w_dapl);
-            if (err < 0) HANDLE_ERROR("H5Pclose w_dapl")
+            if (err < 0) HANDLE_ERROR("H5Pclose w_dapl", name)
         }
         else {
             /* create output dataset */
             out_dset = H5Dcreate(fd_out, name, type_id, space_id, H5P_DEFAULT,
                                  w_dcpl, H5P_DEFAULT);
-            if (out_dset < 0) HANDLE_ERROR("H5Dcreate")
+            if (out_dset < 0) HANDLE_ERROR("H5Dcreate", name)
         }
 
         err = H5Pclose(w_dcpl);
-        if (err < 0) HANDLE_ERROR("H5Pclose w_dcpl")
+        if (err < 0) HANDLE_ERROR("H5Pclose w_dcpl", name)
 
         err = H5Sclose(space_id);
-        if (err < 0) HANDLE_ERROR("H5Sclose")
+        if (err < 0) HANDLE_ERROR("H5Sclose", name)
         GET_TIMER(ts, te, dcreate_time)
 
         if (dims[0] == 0 || dims[1] == 0) { /* return now for 0-size dataset */
             err = H5Tclose(type_id);
-            if (err < 0) HANDLE_ERROR("H5Tclose")
+            if (err < 0) HANDLE_ERROR("H5Tclose", name)
             err = H5Dclose(in_dset);
-            if (err < 0) HANDLE_ERROR("H5Dclose")
+            if (err < 0) HANDLE_ERROR("H5Dclose", name)
             err = H5Dclose(out_dset);
-            if (err < 0) HANDLE_ERROR("H5Dclose")
+            if (err < 0) HANDLE_ERROR("H5Dclose", name)
             return 0;
         }
 
@@ -318,18 +329,18 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             start[1] = 0;
             for (ii=0; ii<ntimes; ii++) {
                 err = H5Dget_chunk_storage_size(in_dset, start, &chunk_size);
-                if (err < 0) HANDLE_ERROR("H5Dget_chunk_storage_size")
+                if (err < 0) HANDLE_ERROR("H5Dget_chunk_storage_size", name)
 
                 /* read a chunk in compressed form */
                 err = H5Dread_chunk(in_dset, H5P_DEFAULT, start, &filter_mask,
                                     it_op->io_buf);
-                if (err < 0) HANDLE_ERROR("H5Dread_chunk")
+                if (err < 0) HANDLE_ERROR("H5Dread_chunk", name)
                 GET_TIMER(ts, te, dread_time)
 
                 /* write a chunk in compressed form */
                 err = H5Dwrite_chunk(out_dset, H5P_DEFAULT, filter_mask, start,
                                      chunk_size, it_op->io_buf);
-                if (err < 0) HANDLE_ERROR("H5Dwrite_chunk")
+                if (err < 0) HANDLE_ERROR("H5Dwrite_chunk", name)
 
                 /* move on to next chunk */
                 start[0] += in_chunk_dims[0];
@@ -340,13 +351,13 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
             /* Read the entire input dataset */
             err = H5Dread(in_dset, type_id, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                           it_op->io_buf);
-            if (err < 0) HANDLE_ERROR("H5Dread")
+            if (err < 0) HANDLE_ERROR("H5Dread", name)
             GET_TIMER(ts, te, dread_time)
 
             /* Write the entire output dataset */
             err = H5Dwrite(out_dset, type_id, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                            it_op->io_buf);
-            if (err < 0) HANDLE_ERROR("H5Dwrite")
+            if (err < 0) HANDLE_ERROR("H5Dwrite", name)
 
             it_op->num_change_chunk++;
 
@@ -369,34 +380,34 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
             /* Setup memory space */
             memspace_id = H5Screate_simple(2, count, NULL);
-            if (memspace_id < 0) HANDLE_ERROR("H5Screate_simple")
+            if (memspace_id < 0) HANDLE_ERROR("H5Screate_simple", name)
 
             /* Setup hyperslab file space */
             in_space_id = H5Dget_space(in_dset);
-            if (in_space_id < 0) HANDLE_ERROR("H5Dget_space")
+            if (in_space_id < 0) HANDLE_ERROR("H5Dget_space", name)
 
             out_space_id = H5Dget_space(out_dset);
-            if (out_space_id < 0) HANDLE_ERROR("H5Dget_space")
+            if (out_space_id < 0) HANDLE_ERROR("H5Dget_space", name)
 
             for (ii=0; ii<ntimes; ii++) {
                 err = H5Sselect_hyperslab(in_space_id, H5S_SELECT_SET, start,
                                           NULL, count, NULL);
-                if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
+                if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab", name)
 
                 /* Read the input dataset in batches */
                 err = H5Dread(in_dset, type_id, memspace_id, in_space_id,
                               H5P_DEFAULT, it_op->io_buf);
-                if (err < 0) HANDLE_ERROR("H5Dread")
+                if (err < 0) HANDLE_ERROR("H5Dread", name)
                 GET_TIMER(ts, te, dread_time)
 
                 err = H5Sselect_hyperslab(out_space_id, H5S_SELECT_SET, start,
                                           NULL, count, NULL);
-                if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
+                if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab", name)
 
                 /* Write the output dataset in batches */
                 err = H5Dwrite(out_dset, type_id, memspace_id, out_space_id,
                                H5P_DEFAULT, it_op->io_buf);
-                if (err < 0) HANDLE_ERROR("H5Dwrite")
+                if (err < 0) HANDLE_ERROR("H5Dwrite", name)
 
                 start[0] += count[0];
                 remain   -= count[0];
@@ -404,30 +415,30 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
                     count[0] = remain;
                     /* update memspace */
                     err = H5Sset_extent_simple(memspace_id, 2, count, NULL);
-                    if (err < 0) HANDLE_ERROR("H5Sset_extent_simple")
+                    if (err < 0) HANDLE_ERROR("H5Sset_extent_simple", name)
                 }
                 GET_TIMER(ts, te, dwrite_time)
             }
             err = H5Sclose(memspace_id);
-            if (err < 0) HANDLE_ERROR("H5Sclose")
+            if (err < 0) HANDLE_ERROR("H5Sclose", name)
             err = H5Sclose(in_space_id);
-            if (err < 0) HANDLE_ERROR("H5Sclose")
+            if (err < 0) HANDLE_ERROR("H5Sclose", name)
             err = H5Sclose(out_space_id);
-            if (err < 0) HANDLE_ERROR("H5Sclose")
+            if (err < 0) HANDLE_ERROR("H5Sclose", name)
 
             it_op->num_change_chunk++;
         }
 
         err = H5Tclose(type_id);
-        if (err < 0) HANDLE_ERROR("H5Tclose")
+        if (err < 0) HANDLE_ERROR("H5Tclose", name)
         err = H5Dclose(in_dset);
-        if (err < 0) HANDLE_ERROR("H5Dclose")
+        if (err < 0) HANDLE_ERROR("H5Dclose", name)
         err = H5Dclose(out_dset);
-        if (err < 0) HANDLE_ERROR("H5Dclose")
+        if (err < 0) HANDLE_ERROR("H5Dclose", name)
         GET_TIMER(ts, te, dclose_time)
     }
     else {
-        HANDLE_ERROR("unexpected data object type");
+        HANDLE_ERROR("unexpected data object type", name)
     }
 
 fn_exit:
@@ -458,7 +469,7 @@ int incr_raw_data_chunk_cache(hid_t fapl_id)
                           */
 
     err = H5Pget_cache(fapl_id, &mdc_nelmts, &rdcc_nslots, &rdcc_nbytes, &w0);
-    if (err < 0) HANDLE_ERROR("H5Pget_cache")
+    if (err < 0) HANDLE_ERROR("H5Pget_cache", __func__)
 
     /* increase cache size to 64 MiB */
     rdcc_nbytes = 67108864;
@@ -473,7 +484,7 @@ int incr_raw_data_chunk_cache(hid_t fapl_id)
     rdcc_nslots = 67231;
 
     err = H5Pset_cache(fapl_id, mdc_nelmts, rdcc_nslots, rdcc_nbytes, w0);
-    if (err < 0) HANDLE_ERROR("H5Pset_cache")
+    if (err < 0) HANDLE_ERROR("H5Pset_cache", __func__)
 fn_exit:
     return err_exit;
 }
@@ -554,7 +565,7 @@ usage(char *progname)
 int main(int argc, char **argv)
 {
     int c, err_exit=0, in_memory_io=1, raw_chunk_cache=1;
-    char msg[1024], *infile=NULL, *outfile=NULL;
+    char *infile=NULL, *outfile=NULL;
     herr_t err;
     hid_t fd_in=-1, fd_out=-1, fapl_id=-1;
     H5G_info_t grp_info;
@@ -629,32 +640,29 @@ int main(int argc, char **argv)
 
     /* create file access property for read and write */
     fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-    if (fapl_id < 0) HANDLE_ERROR("H5Pcreate")
+    if (fapl_id < 0) HANDLE_ERROR("H5Pcreate", infile)
 
     if (in_memory_io) { /* enable in-memory I/O */
         err = H5Pset_fapl_core(fapl_id, 33554432, 1);
-        if (err < 0) HANDLE_ERROR("H5Pset_fapl_core")
+        if (err < 0) HANDLE_ERROR("H5Pset_fapl_core", infile)
     }
 
     /* increase metadata block size to 1 MiB */
     err = H5Pset_meta_block_size(fapl_id, 1048576);
-    if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+    if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size", outfile)
 
 /* This setting degrades the performance.
     err = incr_raw_data_chunk_cache(fapl_id);
-    if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache")
+    if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache", outfile)
 */
     it_op.raw_chunk_cache = raw_chunk_cache;
 
     /* open input file in read-only mode */
     fd_in = H5Fopen(infile, H5F_ACC_RDONLY, fapl_id);
-    if (fd_in < 0) {
-        sprintf(msg, "Can't open input file %s\n", infile);
-        HANDLE_ERROR(msg)
-    }
+    if (fd_in < 0) HANDLE_ERROR("Can't open input file", infile)
 
     err = H5Gget_info_by_name(fd_in, "/", &grp_info, H5P_DEFAULT);
-    if (err < 0) HANDLE_ERROR("H5Gget_info_by_name - root group")
+    if (err < 0) HANDLE_ERROR("H5Gget_info_by_name - root group",  infile)
 
     GET_TIMER(ts, te, timing[0])
 
@@ -671,7 +679,7 @@ int main(int argc, char **argv)
     if (verbose) {
         hsize_t meta_block_size;
         err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
-        if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+        if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size", infile)
         printf("metadata block size is set to %lld\n",meta_block_size);
     }
 
@@ -683,12 +691,12 @@ int main(int argc, char **argv)
     /* Iterate all objects and perform chunking adjustment */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
     err = H5Ovisit3(fd_in, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, rechunk, &it_op, H5O_INFO_ALL);
-    if (err < 0) HANDLE_ERROR("H5Ovisit3")
+    if (err < 0) HANDLE_ERROR("H5Ovisit3", infile)
 #else
     err = H5Ovisit(fd_in, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, rechunk, &it_op);
-    if (err < 0) HANDLE_ERROR("H5Ovisit")
+    if (err < 0) HANDLE_ERROR("H5Ovisit", infile)
 #endif
-    if (it_op.err < 0) HANDLE_ERROR("H5Ovisit")
+    if (it_op.err < 0) HANDLE_ERROR("H5Ovisit", infile)
 
     GET_TIMER(ts, te, timing[2])
 

@@ -382,7 +382,8 @@ int Concatenator::file_create()
 
                 for (jj=0; jj<groups[ii].num_dsets; jj++) {
                     /* Create a new dataset in the output file */
-                    err = create_dataset(group_id, groups[ii].dsets[jj], false);
+                    bool toFill = (groups[ii].dsets[jj].type_class == H5T_STRING);
+                    err = create_dataset(group_id, groups[ii].dsets[jj], toFill);
                     if (err < 0) HANDLE_ERROR("create_dataset")
 
                     /* zero-sized datasets have been closed in create_dataset().
@@ -484,7 +485,8 @@ int Concatenator::file_create()
                  * opened so that it can be used later when concatenating
                  * datasets.
                  */
-                err = create_dataset(group_id, groups[ii].dsets[jj], false);
+                bool toFill = (groups[ii].dsets[jj].type_class == H5T_STRING);
+                err = create_dataset(group_id, groups[ii].dsets[jj], toFill);
                 if (err < 0) HANDLE_ERROR("create_dataset")
             }
 
@@ -647,9 +649,11 @@ int Concatenator::collect_metadata(hid_t             obj_id,
             dset.local_dims[0] = dset_dims[0];
             dset.local_dims[1] = dset_dims[1];
             dset.type_id       = H5Dget_type(dset_id);
+            dset.type_class    = H5Tget_class(dset.type_id);
             dset.type_size     = H5Tget_size(dset.type_id);
-            if (dset.type_id   < 0) RETURN_ERROR("H5Dget_type",name)
-            if (dset.type_size < 0) RETURN_ERROR("H5Tget_size",name)
+            if (dset.type_id    < 0) RETURN_ERROR("H5Dget_type",name)
+            if (dset.type_class < 0) RETURN_ERROR("H5Tget_class", name);
+            if (dset.type_size  < 0) RETURN_ERROR("H5Tget_size",name)
             dset.layout        = H5D_CHUNKED; /* default */
             dset.is_key_seq    = false;
             dset.is_key_base   = false;

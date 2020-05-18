@@ -4,7 +4,7 @@
   HDF5 file
 * [add_key](#add_key) -- adds partitioning key datasets to all groups
 * [sort_file_list](#sort_file_list) -- sorts file names based on the run and subrun IDs stored in the files
-* [check_seq_incr.cpp](#check_seq_incr.cpp) -- checks contents of partitioning
+* [check_seq_incr](#check_seq_incr) -- checks contents of partitioning
   key datasets in all groups for whether their values are organized in a
   monotonically nondecreasing order
 

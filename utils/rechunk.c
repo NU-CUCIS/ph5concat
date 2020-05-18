@@ -567,6 +567,7 @@ int main(int argc, char **argv)
     int c, err_exit=0, in_memory_io=1, raw_chunk_cache=1;
     char *infile=NULL, *outfile=NULL;
     herr_t err;
+    hsize_t meta_block_size;
     hid_t fd_in=-1, fd_out=-1, fapl_id=-1;
     H5G_info_t grp_info;
     struct op_data it_op;
@@ -636,16 +637,62 @@ int main(int argc, char **argv)
 
     if (verbose) printf("output file: %s\n", outfile);
 
+#ifdef HAVE_ACCESS
+    /* if access() is available, use it to check whether file already exists */
+    if (access(outfile, F_OK) == 0) { /* output file already existed */
+        fprintf(stderr, "Error: output file already existed %s\n", outfile);
+        exit(1);
+    }
+#endif
+
     SET_TIMER(ts)
 
-    /* create file access property for read and write */
-    fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-    if (fapl_id < 0) HANDLE_ERROR("H5Pcreate", infile)
-
+    /* open input file for read */
     if (in_memory_io) { /* enable in-memory I/O */
+        /* create file access property */
+        fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+        if (fapl_id < 0) HANDLE_ERROR("H5Pcreate", infile)
+
         err = H5Pset_fapl_core(fapl_id, 33554432, 1);
         if (err < 0) HANDLE_ERROR("H5Pset_fapl_core", infile)
     }
+    else
+        fapl_id = H5P_DEFAULT;
+
+    /* open input file in read-only mode */
+    fd_in = H5Fopen(infile, H5F_ACC_RDONLY, fapl_id);
+    if (fd_in < 0) HANDLE_ERROR("Can't open input file", infile)
+
+    if (in_memory_io) { /* in-memory I/O is disabled */
+        err = H5Pclose(fapl_id);
+        if (err < 0) HANDLE_ERROR("H5Pclose", infile)
+        fapl_id = H5P_DEFAULT;
+    }
+
+#if 0
+    if (verbose) {
+        /* retrieve the property list used by the input file */
+        fapl_id = H5Fget_access_plist(fd_in);
+        if (fapl_id < 0) HANDLE_ERROR("H5Fget_access_plist", infile)
+
+        err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
+        if (err < 0) HANDLE_ERROR("H5Pget_meta_block_size", infile)
+        printf("metadata block size used by the input file is %lld\n",
+               meta_block_size);
+        err = H5Pclose(fapl_id);
+        if (err < 0) HANDLE_ERROR("H5Pclose", infile)
+        fapl_id = H5P_DEFAULT;
+    }
+#endif
+
+    err = H5Gget_info_by_name(fd_in, "/", &grp_info, H5P_DEFAULT);
+    if (err < 0) HANDLE_ERROR("H5Gget_info_by_name - root group",  infile)
+
+    GET_TIMER(ts, te, timing[0])
+
+    /* create file access property for creating output file */
+    fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    if (fapl_id < 0) HANDLE_ERROR("H5Pcreate", outfile)
 
     /* increase metadata block size to 1 MiB */
     err = H5Pset_meta_block_size(fapl_id, 1048576);
@@ -656,15 +703,6 @@ int main(int argc, char **argv)
     if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache", outfile)
 */
     it_op.raw_chunk_cache = raw_chunk_cache;
-
-    /* open input file in read-only mode */
-    fd_in = H5Fopen(infile, H5F_ACC_RDONLY, fapl_id);
-    if (fd_in < 0) HANDLE_ERROR("Can't open input file", infile)
-
-    err = H5Gget_info_by_name(fd_in, "/", &grp_info, H5P_DEFAULT);
-    if (err < 0) HANDLE_ERROR("H5Gget_info_by_name - root group",  infile)
-
-    GET_TIMER(ts, te, timing[0])
 
     /* create output file */
     fd_out = H5Fcreate(outfile, H5F_ACC_EXCL, H5P_DEFAULT, fapl_id);
@@ -677,11 +715,16 @@ int main(int argc, char **argv)
     it_op.fd_out = fd_out;
 
     if (verbose) {
-        hsize_t meta_block_size;
         err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
-        if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size", infile)
-        printf("metadata block size is set to %lld\n",meta_block_size);
+        if (err < 0) HANDLE_ERROR("H5Pget_meta_block_size", outfile)
+        printf("metadata block size used by the output file is set to %lld\n",
+               meta_block_size);
     }
+
+    /* close the access property */
+    err = H5Pclose(fapl_id);
+    if (err < 0) HANDLE_ERROR("H5Pclose", outfile)
+    fapl_id = H5P_DEFAULT;
 
     GET_TIMER(ts, te, timing[1])
 
@@ -711,7 +754,7 @@ fn_exit:
         err = H5Fclose(fd_out);
         if (err < 0) printf("Error at line %d: H5Fclose\n",__LINE__);
     }
-    if (fapl_id >= 0) {
+    if (fapl_id >= 0 && fapl_id != H5P_DEFAULT) {
         err = H5Pclose(fapl_id);
         if (err < 0) printf("Error at line %d: H5Pclose\n",__LINE__);
     }

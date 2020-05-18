@@ -365,8 +365,9 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
         }
         else {
             hid_t memspace_id, in_space_id, out_space_id;
-            hsize_t ii, start[2], count[2], ntimes, remain;
+            hsize_t ii, one[2], start[2], count[2], ntimes, remain;
 
+            one[0] = one[1] = 1;
             start[0] = 0;
             start[1] = 0;
             count[0] = it_op->io_buf_size / (dims[1] * type_size);
@@ -391,7 +392,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
 
             for (ii=0; ii<ntimes; ii++) {
                 err = H5Sselect_hyperslab(in_space_id, H5S_SELECT_SET, start,
-                                          NULL, count, NULL);
+                                          NULL, one, count);
                 if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab", name)
 
                 /* Read the input dataset in batches */
@@ -401,7 +402,7 @@ herr_t rechunk(hid_t             loc_id,        /* object ID */
                 GET_TIMER(ts, te, dread_time)
 
                 err = H5Sselect_hyperslab(out_space_id, H5S_SELECT_SET, start,
-                                          NULL, count, NULL);
+                                          NULL, one, count);
                 if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab", name)
 
                 /* Write the output dataset in batches */

@@ -216,6 +216,7 @@ int Concatenator::write_dataset(DSInfo_t &dset,
     int err_exit=0;
     herr_t err;
     hid_t space_id=-1, memspace_id=-1;
+    hsize_t one[2]={1,1};
 #if defined PROFILE && PROFILE
     double start;
 
@@ -236,7 +237,7 @@ int Concatenator::write_dataset(DSInfo_t &dset,
     if (memspace_id < 0) HANDLE_ERROR("H5Screate_simple")
     space_id = H5Dget_space(dset.out_dset_id);
     if (space_id < 0) HANDLE_ERROR("H5Dget_space")
-    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, lens, NULL);
+    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, one, lens);
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
     err = H5Dwrite(dset.out_dset_id, dset.type_id, memspace_id, space_id,
@@ -269,7 +270,7 @@ int Concatenator::read_2d_dataset(hid_t     dset_id,
     herr_t err;
     hid_t space_id;
     hid_t memspace_id;
-    hsize_t read_offsets[2], new_size;
+    hsize_t one[2]={1,1}, read_offsets[2], new_size;
 #if defined PROFILE && PROFILE
     double start;
     start = MPI_Wtime();
@@ -294,7 +295,7 @@ int Concatenator::read_2d_dataset(hid_t     dset_id,
     read_offsets[0] = offsets[0] - (dset.cur_offset / (dset.global_dims[1] * dset.type_size));
     read_offsets[1] = 0;
 
-    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, read_offsets, NULL, counts, NULL);
+    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, read_offsets, NULL, one, counts);
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
     /* Create a memspac for collective read. */
@@ -331,9 +332,8 @@ int Concatenator::write_2d_dataset(DSInfo_t &dset,
 {
     int err_exit=0;
     herr_t err;
-    hid_t space_id;
-    hid_t memspace_id;
-    hsize_t dset_size_in_bytes;
+    hid_t space_id, memspace_id;
+    hsize_t one[2]={1,1}, dset_size_in_bytes;
 #if defined PROFILE && PROFILE
     double start;
 #endif
@@ -350,7 +350,7 @@ int Concatenator::write_2d_dataset(DSInfo_t &dset,
     if (memspace_id < 0) HANDLE_ERROR("H5Screate_simple")
     space_id = H5Dget_space(dset.out_dset_id);
     if (space_id < 0) HANDLE_ERROR("H5Dget_space")
-    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offsets, NULL, counts, NULL);
+    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offsets, NULL, one, counts);
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
     /* Write the data. */

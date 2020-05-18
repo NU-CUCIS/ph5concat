@@ -284,7 +284,7 @@ int main(int argc, char **argv)
         }
         else {
             unsigned int run, subrun;
-            hsize_t offs[2]={0,0}, lens[2]={1,1};
+            hsize_t one[2]={1,1}, offs[2]={0,0}, lens[2]={1,1};
             hid_t dset_id, mem_space_id, file_space_id;
 
             mem_space_id = H5Screate_simple(2, lens, NULL);
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
             file_space_id = H5Dget_space(dset_id);
             if (file_space_id < 0) HANDLE_ERROR("H5Dget_space")
             err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-                                      lens, NULL);
+                                      one, lens);
             if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
 
             err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
@@ -315,7 +315,7 @@ int main(int argc, char **argv)
             file_space_id = H5Dget_space(dset_id);
             if (file_space_id < 0) HANDLE_ERROR("H5Dget_space")
             err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-                                      lens, NULL);
+                                      one, lens);
             if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
 
             err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,

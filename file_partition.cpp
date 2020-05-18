@@ -316,7 +316,7 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
     dset_id = dset.in_dset_ids[file_no];
 
     if (all_rows != round_len) { /* read a subset of dataset */
-        hsize_t offs[2], lens[2];
+        hsize_t one[2]={1,1}, offs[2], lens[2];
 
         space_id = H5Dget_space(dset_id);
         if (space_id < 0) HANDLE_ERROR("H5Dget_space")
@@ -325,8 +325,8 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
         offs[1] = 0;
         lens[0] = round_len;
         lens[1] = dset.global_dims[1];
-        err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, lens,
-                                  NULL);
+        err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL,
+                                  one, lens);
         if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
 
         memspace_id = H5Screate_simple(2, lens, NULL);
@@ -364,6 +364,7 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
     int err_exit=0;
     herr_t err;
     hid_t space_id=-1, memspace_id=-1;
+    hsize_t one[2]={1,1};
 #if defined PROFILE && PROFILE
     double ts, timing=0.0;
 #endif
@@ -377,7 +378,7 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
     /* Setup hyperslab file space */
     space_id = H5Dget_space(dset.out_dset_id);
     if (space_id < 0) HANDLE_ERROR("H5Dget_space")
-    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, lens, NULL);
+    err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, one, lens);
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
     /* Write the data. */

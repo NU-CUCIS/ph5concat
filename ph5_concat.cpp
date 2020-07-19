@@ -253,10 +253,10 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
                        rank, part_key_base.c_str(), groups[ii].name.c_str());
             }
         }
-	/* error out if the partition key base dataset is not found in group
+        /* error out if the partition key base dataset is not found in group
          * /spill
          */
-	if (groups[spill_grp_no].key_base == NULL) {
+        if (groups[spill_grp_no].key_base == NULL) {
             fprintf(stderr, "Error: partiition key base dataset '/spill/%s' cannot be found\n", part_key_base.c_str());
             err_exit = -1;
             goto fn_exit;
@@ -443,8 +443,8 @@ int Concatenator::file_create()
 
             /* After all the datasets have been created, create a new partition
              * key dataset in each group. Note the partition key base dataset
-	     * may be missing in a group. In this case, the key seq dataset
-	     * will not be created for that group.
+             * may be missing in a group. In this case, the key seq dataset
+             * will not be created for that group.
              */
             if (add_partition_key && groups[ii].key_base != NULL) {
                 err = create_partition_key(groups[ii]);
@@ -492,8 +492,8 @@ int Concatenator::file_create()
 
             /* After all the datasets have been created, create a new partition
              * key dataset in each group. Note the partition key base dataset
-	     * may be missing in a group. In this case, the key seq dataset
-	     * will not be created for that group.
+             * may be missing in a group. In this case, the key seq dataset
+             * will not be created for that group.
              */
             if (add_partition_key && groups[ii].key_base != NULL) {
                 err = create_partition_key(groups[ii]);
@@ -648,12 +648,23 @@ int Concatenator::collect_metadata(hid_t             obj_id,
             dset.name.assign(dataset_name);
             dset.local_dims[0] = dset_dims[0];
             dset.local_dims[1] = dset_dims[1];
-            dset.type_id       = H5Dget_type(dset_id);
-            dset.type_class    = H5Tget_class(dset.type_id);
-            dset.type_size     = H5Tget_size(dset.type_id);
-            if (dset.type_id    < 0) RETURN_ERROR("H5Dget_type",name)
+            dset.type_id = H5Dget_type(dset_id);
+            if (dset.type_id < 0) RETURN_ERROR("H5Dget_type",name)
+            dset.type_class = H5Tget_class(dset.type_id);
             if (dset.type_class < 0) RETURN_ERROR("H5Tget_class", name);
-            if (dset.type_size  < 0) RETURN_ERROR("H5Tget_size",name)
+
+            if (dset.type_class == H5T_STRING) {
+                /* special treatment for string datasets of variable length */
+                dset.type_id = H5Tcopy(H5T_C_S1);
+                if (dset.type_id < 0) RETURN_ERROR("H5Tcopy",name)
+                err = H5Tset_size(dset.type_id, MAX_STR_LEN);
+                if (err < 0) RETURN_ERROR("H5Tset_size",name)
+                dset.type_size = MAX_STR_LEN;
+            }
+            else {
+                dset.type_size = H5Tget_size(dset.type_id);
+                if (dset.type_size  < 0) RETURN_ERROR("H5Tget_size",name)
+            }
             dset.layout        = H5D_CHUNKED; /* default */
             dset.is_key_seq    = false;
             dset.is_key_base   = false;

@@ -14,6 +14,7 @@ using namespace std;
 #include <hdf5.h>
 #include <mpi.h>
 
+#define MAX_STR_LEN 64
 #define PROFILE_HDF5_INTERNAL 0
 #define MIN_DATASET_SIZE     128*1024*1024
 
@@ -24,6 +25,12 @@ using namespace std;
 
 #define HANDLE_ERROR(fname) { \
     cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<fname<<" failed."<<endl; \
+    err_exit = -1; \
+    goto fn_exit; \
+}
+
+#define HANDLE_DSET_ERROR(fname, dname) { \
+    cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"()][line:"<<__LINE__<<"] "<<fname<<" for dataset \""<<dname<<"\" failed."<<endl; \
     err_exit = -1; \
     goto fn_exit; \
 }

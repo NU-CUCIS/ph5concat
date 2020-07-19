@@ -9,6 +9,8 @@
 
 #include <iostream>
 #include <assert.h>
+#include <string.h> /* strncpy() */
+
 #include "ph5_concat.hpp"
 
 #if defined PROFILE && PROFILE
@@ -334,9 +336,50 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
     }
 
     /* Read dataset. */
-    err = H5Dread(dset_id, dset.type_id, memspace_id, space_id, H5P_DEFAULT,
-                  buffer+mem_off);
-    if (err < 0) HANDLE_ERROR("H5Dread")
+    if (dset.type_class == H5T_STRING) {
+        /* Below assumes the string datasets stored in the input files are
+         * defined of variable length. However, HDF5 1.10.6 and 1.12.0 have
+         * not supported parallel I/O for variable-length datasets. We read
+         * the string datasets one file per process and then write the
+         * concatenated datasets as fixed-length. The string contents are
+         * copied over to a fixed-length array.
+         */
+        char **rdata = (char **) malloc (round_len * sizeof (char *));
+        if (space_id == H5S_ALL) {
+            space_id = H5Dget_space(dset_id);
+            if (space_id < 0) HANDLE_ERROR("H5Dget_space")
+        }
+
+        /* prepare reading the variable-length dataset */
+        hid_t filetype = H5Tcopy(H5T_C_S1);
+        if (filetype < 0) HANDLE_ERROR("H5Tcopy");
+        err = H5Tset_size(filetype, H5T_VARIABLE);
+        if (err < 0) HANDLE_ERROR("H5Tset_size");
+        err = H5Dread(dset_id, filetype, memspace_id, space_id, H5P_DEFAULT, rdata);
+        if (err < 0) HANDLE_ERROR("H5Dread");
+        err = H5Tclose(filetype);
+        if (err < 0) HANDLE_ERROR("H5Tclose");
+
+        /* copy rdata[*] to buffer+mem_off */
+        hsize_t ii;
+        char *ptr = buffer+mem_off;
+        for (ii=0; ii<round_len; ii++) {
+            strncpy(ptr, rdata[ii], MAX_STR_LEN);
+            ptr += MAX_STR_LEN;
+        }
+
+        /* Close and release resources internally allocated by HDF5 for
+         * variable-length strings.
+         */
+        err = H5Dvlen_reclaim (dset.type_id, space_id, H5P_DEFAULT, rdata);
+        if (err < 0) HANDLE_ERROR("H5Dvlen_reclaim");
+        free (rdata);
+    }
+    else {
+        err = H5Dread(dset_id, dset.type_id, memspace_id, space_id, H5P_DEFAULT,
+                      buffer+mem_off);
+        if (err < 0) HANDLE_ERROR("H5Dread")
+    }
 
 fn_exit:
     if (memspace_id != H5S_ALL)
@@ -384,7 +427,7 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
     /* Write the data. */
     err = H5Dwrite(dset.out_dset_id, dset.type_id, memspace_id,
                    space_id, dxpl_id, wbuf);
-    if (err < 0) HANDLE_ERROR("H5Dwrite")
+    if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
 
 fn_exit:
     if (memspace_id >= 0)

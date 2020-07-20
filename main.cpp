@@ -214,6 +214,12 @@ int main(int argc, char **argv)
         fflush(stdout);
     }
 
+    if (opt.input_files.size() < (size_t)nprocs) {
+        cout<<"The number of input files should be larger than or equal to the number of processes."<<endl;
+        MPI_Finalize();
+        return 1;
+    }
+
     /* Evenly assign the input files among all workers. */
     length = opt.input_files.size() / nprocs;
     remainder = opt.input_files.size() % nprocs;
@@ -225,11 +231,6 @@ int main(int argc, char **argv)
 
     myinputs = vector<string>(opt.input_files.begin() + offset,
                               opt.input_files.begin() + offset + length);
-    if (myinputs.size() == 0) {
-        cout<<"The number of input files should be larger than or equal to the number of processes."<<endl;
-        MPI_Finalize();
-        return 1;
-    }
 
 #if defined DEBUG && DEBUG
     for (vector<string>::const_iterator it = myinputs.begin();

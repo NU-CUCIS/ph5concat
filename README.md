@@ -10,14 +10,14 @@ taking. Each file contains thousands of two-dimensional datasets, organized
 into hundreds of group, containing data describing the properties of a given
 particle type. To analyze the data, individual datasets are required to be
 concatenated one after another across all files, preferably in an increasing
-order of their run and subrun ID. As the data amount and number of files from a
-given experiment can become very large, the performance scalability of the
-parallel concatenater is important.
+order of their run and subrun IDs. As the data amount and number of files from
+a given experiment can become very large, the performance scalability of such
+parallel data concatenation is important.
 
 ## Input HDF5 Files
-* Each file contains data from a single subrun. All groups contain datasets
-  named 'run', 'subrun', and 'evt'. The values in a 'run' dataset are the
-  same, representing the ID of a run. Similarly for 'subrun', the values in
+* Each file contains data from a single subrun. All groups contain at least 3
+  datasets named 'run', 'subrun', and 'evt'. The values in a 'run' dataset are
+  the same, representing the ID of a run. Similarly for 'subrun', the values in
   a 'subrun' represent the ID of a subrun. However, the subrun IDs are unique
   among all input files.
 * Each file contains multiple groups. The number of groups and group names are
@@ -25,31 +25,44 @@ parallel concatenater is important.
 * Each group contains multiple datasets. The number of datasets in a group can
   be different from each other. The number of datasets, dataset names, and
   their memberships to the groups are the same among all input files.
-* Datasets in the same group are 2D arrays sharing the same size of 1st
-  (most significant) dimension. Their 2nd dimension size may be different.
+* All datasets are 2D arrays.
+* Datasets in the same group share the same size of 1st (most significant)
+  dimension. Their 2nd dimension sizes may be different.
 * Datasets in different groups may be of different 1st dimension sizes.
 * Some of the datasets are actually 1D arrays whose 2nd dimension is of size 1.
-* Datasets can be of size zero, i.e. the 1st dimension being of size 0.
+* Datasets can be of size zero where their 1st dimension is of size 0.
 * All the files have the same "schema", i.e. same numbers of groups and
   datasets, and their names.
 * The size of 1st dimension of a dataset in a group of an input file may be
-  different from the one in the same group but a different files.
+  different from the one in the same group but a different file.
 * The same datasets in the same group but in different input files share the
   size of the 2nd dimension.
+
+## Output HDF5 File
+* A single HDF5 output file will be created.
+* The output file shares the same schema as the input files, i.e. the same
+  numbers and names of groups datasets.
+* The size of 1st dimension (most significant) of individual datasets are sum
+  of the 1st dimension of the same dataset from all input files.
+* HDF5 compression and data chunking settings can be customized by command-line
+  options (see below.)
 
 ## Compiler and Software Requirements
 * A C++ compiler that support ISO C++0x standard or higher
 * MPI C and C++ compilers
-* An HDF5 library version 1.10.5 and later built with parallel I/O feature enabled
+* An HDF5 library version 1.10.5 and later built with parallel I/O feature
+  enabled
 
 ## Instructions to Build
-0. If building from a git clone of this repository, then run command below
-   first. Otherwise, if building from an official release, this step can be
-   skipped.
+0. If building from a git clone of this repository, then the below command
+   must run first. Otherwise, if building from an official release, this step
+   can be skipped.
    ```
+   git clone https://github.com/NU-CUCIS/ph5concat.git
+   cd ph5concat
    autoreconf -i
    ```
-1. Run command 'configure', for example
+1. Run command 'configure'. An example is given below.
    ```
    ./configure --with-mpi=$HOME/MPICH/3.3 \
                --with-hdf5=$HOME/HDF5/1.10.5 \

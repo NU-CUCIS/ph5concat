@@ -47,7 +47,7 @@ using namespace std;
  * Metadata of each dataset.
  */
 struct DSInfo_t {
-    string   name;          /* name of dataset */
+    string        name;          /* name of dataset */
     hsize_t       local_dims[2]; /* dim sizes, aggregated from local files */
     hsize_t       global_dims[2];/* dim sizes, aggregated from all files */
     hsize_t       chunk_dims[2]; /* chunk dimension sizes */
@@ -66,8 +66,8 @@ struct DSInfo_t {
     hsize_t       seq_len;       /* number of unique IDs in key.seq dataset */
     long long    *seq_buf;       /* key.seq buffer */
 
-    vector<hid_t>   in_dset_ids;/* dataset IDs of opened input files */
-    vector<hsize_t> in_dim0;    /* 1st dim sizes in assigned input files */
+    vector<hid_t>   in_dset_ids; /* dataset IDs of opened input files */
+    vector<hsize_t> in_dim0;     /* 1st dim sizes in assigned input files */
 
 
     hsize_t cur_chunk_offset; /* used in concatenation phase: */
@@ -77,7 +77,7 @@ struct DSInfo_t {
 typedef struct DSInfo_t DSInfo_t;
 
 struct GrpInfo {
-    string  name;        /* name of dataset */
+    string       name;        /* name of dataset */
     hid_t        id;          /* HDF5 group ID */
     size_t       num_dsets;   /* number of dataset objects in this group */
     size_t       shared_dim0; /* size of common 1st dimension (all datasets in

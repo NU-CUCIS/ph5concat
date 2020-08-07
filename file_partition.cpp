@@ -49,7 +49,9 @@ int Concatenator::write_partition_key_dataset()
         seq_ptr = seq_buf;
 
         /* iterate all input files assigned to this process */
-        for (jj=0; jj<base->in_dset_ids.size(); jj++) {
+        for (jj=0; jj<num_input_files; jj++) {
+            if (base->in_dim0[jj] == 0) continue;
+
             hid_t in_dset_id = base->in_dset_ids[jj];
 
             /* read the entire partition base dataset */
@@ -125,7 +127,9 @@ int Concatenator::generate_partition_key(GrpInfo &grp)  /* group /spill */
     seq_off = grp.key_base->global_off;
 
     /* iterate all input files assigned to this process */
-    for (ii=0; ii<grp.key_base->in_dset_ids.size(); ii++) {
+    for (ii=0; ii<num_input_files; ii++) {
+        if (grp.key_base->in_dim0[ii] == 0) continue;
+
         hid_t in_dset_id = grp.key_base->in_dset_ids[ii];
 
         /* read the entire partition key base dataset */
@@ -201,7 +205,8 @@ int Concatenator::concat_datasets(bool process_large_dsets)
             size_t num_writes = 0;
 
             /* iterate input files assigned to this process */
-            for (kk=0; kk<dset.in_dset_ids.size(); kk++) {
+            for (kk=0; kk<num_input_files; kk++) {
+                if (dset.in_dim0[kk] == 0) continue;
                 hid_t in_dset_id = dset.in_dset_ids[kk];
                 hsize_t in_dset_nrows = dset.in_dim0[kk];
                 hsize_t offset_in_dset = 0;

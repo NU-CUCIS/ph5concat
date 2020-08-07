@@ -618,7 +618,6 @@ int Concatenator::collect_metadata(hid_t             obj_id,
         DSInfo_t &dset = groups[grp_no].dsets[groups[grp_no].num_dsets];
         groups[grp_no].num_dsets++;
 
-        hsize_t dset_size;
         hid_t dset_id;
         char *name_copy = strdup(name);
         char *group_name = strtok(name_copy, "/");
@@ -699,16 +698,20 @@ int Concatenator::collect_metadata(hid_t             obj_id,
         if (dset_dims[0] > 0) {
             dset.in_dset_ids.push_back(dset_id);  /* save dataset ID */
             dset.in_dim0.push_back(dset_dims[0]); /* save dataset dim0 size */
+            hsize_t dset_size = dset_dims[0] * dset_dims[1] * dset.type_size;
+            if (max_local_size_in_bytes < dset_size)
+                max_local_size_in_bytes = dset_size;
         }
         else {
+            /* keep the vector size the same as num_input_files, in case a
+             * dataset is zero-sized in one file but non-zero sized in another
+             */
+            dset.in_dset_ids.push_back(-1);
+            dset.in_dim0.push_back(0);
             /* No need to keep zero-size dataset open */
             err = H5Dclose(dset_id);
             if (err < 0) RETURN_ERROR("H5Dclose",name)
         }
-        dset_size = dset_dims[0] * dset_dims[1] * dset.type_size;
-
-        if (max_local_size_in_bytes < dset_size)
-            max_local_size_in_bytes = dset_size;
 
         free(name_copy);
     }

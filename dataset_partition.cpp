@@ -26,7 +26,8 @@ int Concatenator::concat_small_datasets(vector<string> const &inputs)
         for (jj=0; jj<groups[ii].num_dsets; jj++) {
             DSInfo_t &dset = groups[ii].dsets[jj];
             if (dset.global_dims[1] > 1) {
-                for (kk=0; kk<dset.in_dset_ids.size(); kk++) {
+                for (kk=0; kk<num_input_files; kk++) {
+                    if (dset.in_dset_ids[kk] == -1) continue;
                     err = H5Dclose(dset.in_dset_ids[kk]);
                     if (err < 0) HANDLE_ERROR("H5Dclose")
                 }

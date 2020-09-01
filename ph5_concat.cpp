@@ -35,6 +35,7 @@ Concatenator::Concatenator(int           nprocs,
                            size_t        compress_threshold,
                            bool          one_process_create,
                            unsigned int  zip_level,
+                           bool          enforce_contiguous,
                            size_t        buffer_size,
                            int           io_strategy,
                            string const& part_key_base) :
@@ -45,6 +46,7 @@ Concatenator::Concatenator(int           nprocs,
     num_input_files(num_input_files),
     io_buffer_size(buffer_size),
     zip(zip_level),
+    enforce_contiguous(enforce_contiguous),
     posix_open(posix_open),
     in_memory_io(in_memory_io),
     chunk_caching(chunk_caching),
@@ -321,7 +323,7 @@ int Concatenator::create_partition_key(GrpInfo &grp)
     if (seq.global_dims[0] == 0)
         seq.layout = H5D_COMPACT;
     else
-        seq.layout = H5D_CHUNKED;
+        seq.layout = (enforce_contiguous == true) ? H5D_CONTIGUOUS : H5D_CHUNKED;
 
     herr_t err = create_dataset(grp.id, seq, false);
     if (err < 0) RETURN_ERROR("create_dataset", seq.name.c_str())
@@ -664,7 +666,9 @@ int Concatenator::collect_metadata(hid_t             obj_id,
                 dset.type_size = H5Tget_size(dset.type_id);
                 if (dset.type_size  < 0) RETURN_ERROR("H5Tget_size",name)
             }
-            dset.layout        = H5D_CHUNKED; /* default */
+            dset.layout        = (enforce_contiguous == true) ?
+                                 H5D_CONTIGUOUS :
+                                 H5D_CHUNKED;
             dset.is_key_seq    = false;
             dset.is_key_base   = false;
 

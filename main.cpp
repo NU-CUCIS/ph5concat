@@ -49,6 +49,7 @@ public:
     bool posix_open;
     bool in_memory_io;
     bool chunk_caching;
+    bool enforce_contiguous;
     int  io_strategy;
     size_t compress_threshold;
     unsigned int zip_level;
@@ -75,6 +76,7 @@ usage(char *progname)
   [-m size]    disable compression for datasets of size smaller than 'size' MiB\n\
   [-k name]    name of dataset used to generate partitioning keys\n\
   [-z level]   GZIP compression level (default: 6)\n\
+  [-c]         use contiguous storage layout for all datasets (default: disable)\n\
   [-b size]    I/O buffer size per process (default: 128 MiB)\n\
   [-o outfile] output file name (default: out.h5)\n\
   [-i infile]  input file containing HEP data files (default: list.txt)\n\n\
@@ -95,6 +97,7 @@ Options::Options(int argc, char **argv) :
                  io_strategy(2),
                  compress_threshold(0),
                  zip_level(6),
+                 enforce_contiguous(false),
                  buffer_size(128*1048576),
                  output_file("./out.h5"),
                  part_key_base("")
@@ -104,7 +107,7 @@ Options::Options(int argc, char **argv) :
     string line;
     ifstream fd;
 
-    while ((opt = getopt(argc, argv, "hqspdrt:m:k:i:o:z:b:")) != -1) {
+    while ((opt = getopt(argc, argv, "hqspdrct:m:k:i:o:z:b:")) != -1) {
         switch (opt) {
             case 's':
                 one_process_create = true;
@@ -139,6 +142,9 @@ Options::Options(int argc, char **argv) :
                 break;
             case 'z':
                 zip_level = strtoul(optarg, NULL, 0);
+                break;
+            case 'c':
+                enforce_contiguous = true;
                 break;
             case 'b':
                 buffer_size = strtoul(optarg, NULL, 0) * 1048576;
@@ -248,6 +254,7 @@ int main(int argc, char **argv)
                         opt.compress_threshold,
                         opt.one_process_create,
                         opt.zip_level,
+                        opt.enforce_contiguous,
                         opt.buffer_size,
                         opt.io_strategy,
                         opt.part_key_base);

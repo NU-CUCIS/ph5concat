@@ -101,8 +101,8 @@ public:
                  size_t num_input_files, string const& output,
                  bool posix_open, bool in_memory_io, bool chunk_caching,
                  size_t compress_threshold, bool one_process_create,
-                 unsigned int zip_level, size_t buffer_size, int io_strategy,
-                 string const& part_key_base);
+                 unsigned int zip_level, bool enforce_contiguous,
+                 size_t buffer_size, int io_strategy, string const& part_key_base);
     ~Concatenator();
     int construct_metadata(vector<string> const &inputs);
     int file_create();
@@ -155,6 +155,7 @@ private:
     size_t   num_input_files;
     size_t   io_buffer_size;   /* I/O buffer size */
     unsigned int zip;          /* GZIP compression level */
+    bool     enforce_contiguous;    /* enforce contiguous storage layout for all datasets */
     bool     posix_open;    /* use POSIX I/O or MPI-IO to open input files */
     bool     in_memory_io;  /* enable HDF5 in-memory I/O to read input files */
     bool     chunk_caching; /* enable HDF5 caching for raw data chunks */

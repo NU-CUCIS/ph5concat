@@ -90,6 +90,7 @@ parallel data concatenation is important.
   [-m size]      disable compression for datasets of size smaller than 'size' MiB
   [-k base_name] dataset name in group /spill to generate partitioning keys
   [-z level]     GZIP compression level (default: 6)
+  [-c]           enforces the contiguous layout for all datasets (default: false)
   [-b size]      I/O buffer size per process (default: 128 MiB)
   [-o outfile]   output file name (default: out.h5)
   [-i infile]    input file containing HEP data files (default: list.txt)

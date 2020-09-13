@@ -206,7 +206,7 @@ parallel data concatenation is important.
   End-to-end:                           314.8095
   ```
 
-## Developer Team:
+## Development Team:
    * Sunwoo Lee <<slz839@eecs.northwestern.edu>>
    * Wei-keng Liao <<wkliao@northwestern.edu>>
    * Saba Sehrish <<ssehrish@fnal.gov>>

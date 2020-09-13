@@ -206,9 +206,16 @@ parallel data concatenation is important.
   End-to-end:                           314.8095
   ```
 
+## Developer Team:
+   * Sunwoo Lee <<slz839@eecs.northwestern.edu>>
+   * Wei-keng Liao <<wkliao@northwestern.edu>>
+   * Saba Sehrish <<ssehrish@fnal.gov>>
+   * Marc Paterno <<paterno@fnal.gov>>
+   * James Kowalkowski <<jbk@fnal.gov>>
+
 ## Questions/Comments:
-* Sunwoo Lee <slz839@eecs.northwestern.edu>
-* Wei-keng Liao <wkliao@northwestern.edu>
+   * Sunwoo Lee <<slz839@eecs.northwestern.edu>>
+   * Wei-keng Liao <<wkliao@northwestern.edu>>
 
 ## Project funding supports:
 This material is based upon work supported by the U.S. Department of Energy,

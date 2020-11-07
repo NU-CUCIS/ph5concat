@@ -374,7 +374,7 @@ if test "x$has_H5get_alloc_stats" = xyes ; then
    AC_DEFINE(HAS_H5GET_ALLOC_STATS, 1, [Define if API H5get_alloc_stats is defined])
 fi
 
-AC_CONFIG_FILES(Makefile utils/Makefile examples/Makefile)
+AC_CONFIG_FILES(Makefile utils/Makefile examples/Makefile case_study/Makefile)
 
 AC_OUTPUT
 echo "------------------------------------------------------------------------------"

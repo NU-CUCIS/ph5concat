@@ -6,7 +6,7 @@
 
 SUFFIXES = .cpp .hpp .o
 
-SUBDIRS = . utils examples
+SUBDIRS = . utils examples case_study
 
 AM_CPPFLAGS = -I.
 if PH5CONCAT_DEBUG

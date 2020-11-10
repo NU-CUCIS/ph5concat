@@ -19,7 +19,7 @@ noinst_PROGRAMS = pandana_read
 pandana_read_SOURCES = pandana_read.c
 
 EXTRA_DIST = README.md \
-             batch.sh
+             dset.txt
 
 dist-hook:
 	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/pandana_read.c

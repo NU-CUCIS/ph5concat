@@ -69,17 +69,20 @@ Parallel reads consist of the following steps.
 ### Run Command usage:
   ```
   % ./pandana_read -h
-  Usage: ./pandana_read [-h|-v] [-p number] [-r number] [-l file_name] [-i file_name]
+  Usage: ./pandana_read [-h|-v] [-p number] [-s number] [-m number] [-l file_name] [-i file_name]
     [-h]           print this command usage message
     [-v]           verbose mode (default: off)
     [-p number]    performance profiling method (0, 1, or 2)
                    0: report file open, close, read timings (default)
                    1: report various chunk numebrs read information
                    2: report read times for individual datasets
-    [-r number]    read method (0, 1, or 2)
+    [-s number]    read method for evt.seq (0, 1, or 2)
                    0: root process reads evt.seq and broadcasts (default)
                    1: all processes read the entire evt.seq collectively
                    2: root process reads evt.seq and scatters boundaries
+    [-m number]    read method for other datasets (0 or 1)
+                   0: use H5Dread (default)
+                   1: use MPI_file_read_all
     [-l file_name] name of file containing dataset names to be read
     [-i file_name] name of input HDF5 file
     *ph5concat version 1.1.0 of March 1, 2020.
@@ -90,43 +93,49 @@ A sample input file named 'dset.txt' is provided in this folder which includes
 names of a list of datasets to be read from the concatenated HDF5 file.
 Example run and output:
   ```
-  % mpiexec -n 4 ./pandana_read -r 0 -l dset.txt -i nd_165_files_with_evtseq.h5
+  % mpiexec -n 4 ./pandana_read -s 0 -l dset.txt -i nd_165_files_with_evtseq.h5
   Number of MPI processes = 4
   Input dataset name file 'dset.txt'
   Input concatenated HDF5 file 'nd_165_files_with_evtseq.h5'
   Number of datasets to read = 123
   Number of groups = 15
   Maximum number of datasets among groups = 13
-  Read method: root process reads evt.seq and broadcasts
+  Read evt.seq method: root process reads and broadcasts
+  Read datasets method: H5Dread
   ----------------------------------------------------
-  Total read amount 1187.74 MiB (1.16 GiB)
-  Read amount MAX=24.57 MiB MIN=0.39 MiB
-  MAX open_time=0.42 read_time=4.51 close_time=0.00
-  MIN open_time=0.41 read_time=4.51 close_time=0.00
+  MAX open_time=0.01 read_time=1.45 close_time=0.00
+  MIN open_time=0.01 read_time=1.45 close_time=0.00
   ----------------------------------------------------
+  Read amount MAX=4.77 MiB MIN=0.39 MiB (among all datasets, all processes)
+  Total amount of datasets 1184.61 MiB (1.16 GiB)
+  Total amount of evt.seq  259.68 MiB (0.25 GiB)
 
-  % mpiexec -n 4 ./pandana_read -r 2 -p 1 -l dset.txt -i nd_165_files_with_evtseq.h5
+  % mpiexec -n 4 ./pandana_read -s 2 -p 1 -l dset.txt -i nd_165_files_with_evtseq.h5
   Number of MPI processes = 4
   Input dataset name file 'dset.txt'
   Input concatenated HDF5 file 'nd_165_files_with_evtseq.h5'
   Number of datasets to read = 123
   Number of groups = 15
   Maximum number of datasets among groups = 13
-  Read method: root process reads evt.seq and scatters boundaries
+  Read evt.seq method: root process reads evt.seq and scatters boundaries
+  Read datasets method: H5Dread
   ----------------------------------------------------
-  Total read amount 1187.74 MiB (1.16 GiB)
-  Read amount MAX=24.57 MiB MIN=0.39 MiB
-  MAX open_time=0.00 read_time=1.33 close_time=0.00
-  MIN open_time=0.00 read_time=1.33 close_time=0.00
+  MAX open_time=0.01 read_time=1.42 close_time=0.00
+  MIN open_time=0.01 read_time=1.42 close_time=0.00
   ----------------------------------------------------
-  total number of chunks in all 123 datasets: 963
-  Aggregate number of chunks read by all processes: 1287
-  Out of 963 chunks, number of chunks read by two or more processes: 320
-  Out of 963 chunks, most shared chunk is read by number of processes: 3
+  Read amount MAX=4.77 MiB MIN=0.39 MiB (among all datasets, all processes)
+  Total amount of datasets 1184.61 MiB (1.16 GiB)
+  Total amount of evt.seq  259.68 MiB (0.25 GiB)
+  total number of chunks in all 123 datasets (exclude /spill/evt.seq): 1228
+  Aggregate number of chunks read by all processes: 1552
+          averaged among processes: 388.00
+          averaged among processes among datasets: 3.15
+  Out of 1228 chunks, number of chunks read by two or more processes: 320
+  Out of 1228 chunks, most shared chunk is read by number of processes: 3
   ----------------------------------------------------
-  rank   0: number of chunks read=225 (max=4 min=1 avg=1.83 among 123 datasets)
-  rank   1: number of chunks read=392 (max=6 min=1 avg=3.19 among 123 datasets)
-  rank   2: number of chunks read=332 (max=5 min=2 avg=2.70 among 123 datasets)
-  rank   3: number of chunks read=338 (max=6 min=1 avg=2.75 among 123 datasets)
+  rank   0: number of chunks read=490 (max=4 min=1 avg=3.98 among 108 datasets, exclude evt.seq)
+  rank   1: number of chunks read=392 (max=6 min=1 avg=3.19 among 108 datasets, exclude evt.seq)
+  rank   2: number of chunks read=332 (max=5 min=2 avg=2.70 among 108 datasets, exclude evt.seq)
+  rank   3: number of chunks read=338 (max=6 min=1 avg=2.75 among 108 datasets, exclude evt.seq)
   ```
 ---

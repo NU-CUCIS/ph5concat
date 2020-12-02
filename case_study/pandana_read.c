@@ -456,13 +456,15 @@ int read_mpio(hid_t       fd,
               MPI_File    fh,
               size_t      low,
               size_t      high,
-              int         profile)
+              int         profile,
+              double     *inflate_t)
 {
     int j, d, mpi_err;
     herr_t  err;
     hid_t   dset;
     size_t read_len;
     unsigned char *whole_chunk;
+    double timing;
     MPI_Status status;
 
     for (d=1; d<group->nDatasets; d++) {
@@ -562,6 +564,7 @@ int read_mpio(hid_t       fd,
         assert(mpi_err == MPI_SUCCESS);
 
         /* decompress each chunk into group->buf[d] */
+        timing = MPI_Wtime();
         size_t whole_chunk_size = chunk_dims[0] * chunk_dims[1] * dtype_size;
         whole_chunk = (unsigned char*) malloc(whole_chunk_size);
         for (j=0; j<nChunks; j++) {
@@ -606,10 +609,10 @@ int read_mpio(hid_t       fd,
             }
             chunk_buf_ptr += disp_indx[j].block_len;
         }
-
         free(whole_chunk);
         free(chunk_buf);
         free(disp_indx);
+        *inflate_t += MPI_Wtime() - timing;
     }
     return 1;
 }
@@ -870,9 +873,9 @@ int main(int argc, char **argv) {
     int c, d, g, nprocs, rank, nDatasets, nGroups, mpi_err;
     char *listfile=NULL, *infile=NULL;
     size_t low=0, high=0;
-    double open_t, read_t, close_t;
-    double max_open_t, max_read_t, max_close_t;
-    double min_open_t, min_read_t, min_close_t;
+    double open_t, read_t, close_t, inflate_t=0.0;
+    double max_open_t, max_read_t, max_close_t, max_inflate_t;
+    double min_open_t, min_read_t, min_close_t, min_inflate_t;
     MPI_File fh;
     MPI_Info info = MPI_INFO_NULL;
     NOvA_group *groups=NULL;
@@ -991,7 +994,7 @@ int main(int argc, char **argv) {
             err = read_hdf5(fd, rank, groups+g, xfer_plist, low, high, profile);
         else if (dset_opt == 1)
             /* read the remaining datasets using MPI-IO, one dataset at a time */
-            err = read_mpio(fd, rank, groups+g, fh, low, high, profile);
+            err = read_mpio(fd, rank, groups+g, fh, low, high, profile, &inflate_t);
 
         /* This is where PandAna performs computation to identify events of
          * interest from the read buffers
@@ -1017,12 +1020,14 @@ int main(int argc, char **argv) {
     close_t = MPI_Wtime() - close_t;
 
     /* find the max/min timings among all processes */
-    MPI_Allreduce(&open_t,  &max_open_t, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Allreduce(&read_t,  &max_read_t, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Allreduce(&close_t, &max_close_t,1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Allreduce(&open_t,  &min_open_t, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-    MPI_Allreduce(&read_t,  &min_read_t, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-    MPI_Allreduce(&close_t, &min_close_t,1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&open_t,    &max_open_t,   1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&read_t,    &max_read_t,   1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&close_t,   &max_close_t,  1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&inflate_t, &max_inflate_t,1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(&open_t,    &min_open_t,   1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&read_t,    &min_read_t,   1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&close_t,   &min_close_t,  1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&inflate_t, &min_inflate_t,1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
     if (profile == 2) {
         for (g=0; g<nGroups; g++)
             MPI_Allreduce(MPI_IN_PLACE, groups[g].read_t, groups[g].nDatasets,
@@ -1034,6 +1039,9 @@ int main(int argc, char **argv) {
                max_open_t,max_read_t,max_close_t);
         printf("MIN open_time=%.2f read_time=%.2f close_time=%.2f\n",
                min_open_t,min_read_t,min_close_t);
+        if (dset_opt > 0)
+            printf("MAX inflate_time=%.2f MIN inflate_time=%.2f\n",
+                   max_inflate_t, min_inflate_t);
         printf("----------------------------------------------------\n");
     }
     fflush(stdout);

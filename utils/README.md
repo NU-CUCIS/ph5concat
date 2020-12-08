@@ -177,14 +177,16 @@ Example run and output:
 
 **sort_file_list** is a utility program to be run in sequential. Given  a list
 of NOvA file names, it sorts the file names based on the values of two
-datasets: 'run' and 'subrun'. The sorted file names are stored in a text file.
-The sorting order first follows the run IDs and then subrun IDs. The output
-file can be used as an input to the parallel dataset concatenation program
+datasets: 'run' and 'subrun' by default. The sorted file names are stored in a text file.
+The sorting order first follows the run IDs and then subrun IDs. Additional datasets 
+can be included in the sorting with `-a`.
+The output file can be used as an input to the parallel dataset concatenation program
 `ph5_concat`, so that the concatenated data is organized in  an increasing
 order of run and subrun IDs.
 
 Command usage:
- ```
+     ```
+     % ./sort_file_list -h
      [-h]          print this command usage message
      [-v]          verbose mode (default: off)
      [-d]          debug mode (default: off)
@@ -204,7 +206,7 @@ Command usage:
      5. each group must contain datasets 'run' and 'subrun'
      6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
-  ```
+    ```
 Example run and output:
   ```
   % cat sample_in_list.txt 

@@ -40,7 +40,7 @@ static int verbose, debug;
     goto fn_exit; \
 }
 
-const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun", "/rec.hdr/cycle"};
+const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun"};
 
 struct compv {
   bool operator()(const std::vector<unsigned int>& lhs, const std::vector<unsigned int>& rhs)
@@ -203,11 +203,14 @@ usage(char *progname)
   [-h]          print this command usage message\n\
   [-v]          verbose mode (default: off)\n\
   [-d]          debug mode (default: off)\n\
+  [-a]          full path to dataset used as additional index in multi-index sorting\n\
+                multiple values allowed\n\
   [-o outfile]  output file name (default: 'out_list.txt')\n\
   infile        input file name contains a list of HDF5 file names (required)\n\n\
   This utility program re-order the files in infile into a sorted list based\n\
-  on the increasing order of 'run' and 'subrun' IDs. Requirements for the\n\
-  input HDF5 files:\n\
+  on the increasing order of 'run' and 'subrun' IDs. Additional IDs can be used to sort with\n\
+  argument -a. Eg, -a /rec.hdr/cycle.\n\
+  Requirements for the input HDF5 files:\n\
     1. must contain datasets '/spill/run' and '/spill/subrun'\n\
     2. may contain multiple groups at root level\n\
     3. each group may contain multiple 2D datasets\n\
@@ -216,7 +219,7 @@ usage(char *progname)
     6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-d|-o outfile] infile\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-d|-o outfile|-a /additiona/index...] infile\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
@@ -239,8 +242,10 @@ int main(int argc, char **argv)
     debug   = 0; /* default is no */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvdo:")) != -1)
+    while ((c = getopt(argc, argv, "hvda:o:")) != -1)
         switch(c) {
+	    case 'a': it_op.add_level(optarg);
+	              break;
             case 'h': usage(argv[0]);
                       err_exit = -1;
                       goto fn_exit;

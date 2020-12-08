@@ -40,10 +40,7 @@ static int verbose, debug;
     goto fn_exit; \
 }
 
-const std::vector<std::string> DEFAULT_LEVELS {"run", "subrun"};
-
-/* compare for 2-tuple (run, subrun) */
-typedef tuple<unsigned int, unsigned int> key;
+const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun"};
 
 struct compv {
   bool operator()(const std::vector<unsigned int>& lhs, const std::vector<unsigned int>& rhs)
@@ -57,15 +54,7 @@ struct compv {
     return false;
   }
 };
-struct comp2 : public unary_function<key, size_t> {
-  bool operator()(const key& lhs, const key& rhs) const {
-      
-    if (get<0>(lhs) < get<0>(rhs)) return true;
-    if (get<0>(lhs) > get<0>(rhs)) return false;
-    if (get<1>(lhs) < get<1>(rhs)) return true;
-    return false;
-  }
-};
+
 typedef map<std::vector<unsigned int>, string, compv> tuple_map;
 
 /* parameters to be passed to the call back function */
@@ -123,13 +112,22 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
     /* remove group name */
     char *path = strdup(name);
     char *dset_name = basename(path);
+
+    /* placeholder for level names */
+    char *level_name;
     
-    /* skip dataset that is not in list of index names */
+    /* skip dataset that is not in list of index names
+       Note: dset_name is compared to basename of the level index
+             full path to ensure consistency within file.
+	     Importantly, the current group does not contain
+	     a matching dataset, this group will be skipped.
+     */
     bool skip = true;
     for(auto eidx = 0u; eidx < it_op->names.size(); eidx++)
-      skip &= strcmp(dset_name, it_op->names[eidx].c_str()) != 0;      
+      /* basename requires non-const char* so make a copy */
+      strncpy(level_name, it_op->names[eidx].c_str(), it_op->names[eidx].size());
+      skip &= strcmp(dset_name, level_name) != 0;      
     if(skip) goto fn_exit;
-
 
     /* Open the dataset. Note that loc_id is not the dataset/group ID. */
     dset_id = H5Dopen(loc_id, name, H5P_DEFAULT);
@@ -322,54 +320,45 @@ int main(int argc, char **argv)
             unsigned int run, subrun;
             hsize_t one[2]={1,1}, offs[2]={0,0}, lens[2]={1,1};
             hid_t dset_id, mem_space_id, file_space_id;
-
+	    
             mem_space_id = H5Screate_simple(2, lens, NULL);
             if (mem_space_id < 0) HANDLE_ERROR("H5Screate_simple");
 
-            /* open /spill/run */
-            dset_id = H5Dopen(file_id, "/spill/run", H5P_DEFAULT);
-            if (dset_id < 0) HANDLE_ERROR("H5Dopen");
+	    for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
+	      /* open the dataset */
+	      dset_id = H5Dopen(file_id, it_op.names[eidx].c_str(), H5P_DEFAULT);
+	      if (dset_id < 0) HANDLE_ERROR("H5Dopen");
+	      
+	      
+	      file_space_id = H5Dget_space(dset_id);
+	      if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
 
-            file_space_id = H5Dget_space(dset_id);
-            if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
-            err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-                                      one, lens);
-            if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
+	      /* set the window */
+	      err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
+					one, lens);
+	      if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
 
-            err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
-                          H5P_DEFAULT, &run);
-            if (err < 0) HANDLE_ERROR("H5Dread");
+	      /* read data */
+	      err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
+			    H5P_DEFAULT, &it_op.event_index[eidx]);
+	      if (err < 0) HANDLE_ERROR("H5Dread");
 
-            err = H5Dclose(dset_id);
-            if (err < 0) HANDLE_ERROR("H5Dclose");
-            H5Sclose(file_space_id);
-
-            /* open /spill/subrun */
-            dset_id = H5Dopen(file_id, "/spill/subrun", H5P_DEFAULT);
-            if (dset_id < 0) HANDLE_ERROR("H5Dopen");
-
-            file_space_id = H5Dget_space(dset_id);
-            if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
-            err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-                                      one, lens);
-            if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
-
-            err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
-                          H5P_DEFAULT, &subrun);
-            if (err < 0) HANDLE_ERROR("H5Dread");
-
-            err = H5Dclose(dset_id);
-            if (err < 0) HANDLE_ERROR("H5Dclose");
-
-            H5Sclose(file_space_id);
+	      err = H5Dclose(dset_id);
+	      if (err < 0) HANDLE_ERROR("H5Dclose");
+	      H5Sclose(file_space_id);
+	    }
             H5Sclose(mem_space_id);
 
-            if (verbose)
-                printf("File %zd: run ID = %d subrun ID = %u\n",i,run,subrun);
+            if (verbose) {
+	      printf("File %zd:", i);
+	      for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
+		printf(" %s ID = %d", it_op.names[eidx].c_str(), it_op.event_index[eidx]);
+	      }
+	      printf("\n");
+	    }
 
             /* use sorted map in an increasing order of run and subrun */
-	    std::vector<unsigned int> event_index = {run, subrun};
-            file_list[event_index] = in_list[i];
+            file_list[it_op.event_index] = in_list[i];
         }
         err = H5Fclose(file_id);
         if (err < 0)

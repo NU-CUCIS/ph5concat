@@ -184,24 +184,25 @@ file can be used as an input to the parallel dataset concatenation program
 order of run and subrun IDs.
 
 Command usage:
-  ```
-  % ./sort_file_list -h
-  Usage: ./sort_file_list [-h|-v|-d|-o outfile] infile
-    [-h]          print this command usage message
-    [-v]          verbose mode (default: off)
-    [-d]          debug mode (default: off)
-    [-o outfile]  output file name (default: 'out_list.txt')
-    infile        input file name contains a list of HDF5 file names (required)
-
-    This utility program re-order the files in infile into a sorted list based
-    on the increasing order of 'run' and 'subrun' IDs. Requirements for the
-    input HDF5 files:
-      1. must contain datasets '/spill/run' and '/spill/subrun'
-      2. may contain multiple groups at root level
-      3. each group may contain multiple 2D datasets
-      4. 1st dimension of all datasets in the same group share the same size
-      5. each group must contain datasets 'run' and 'subrun'
-      6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE
+ ```
+     [-h]          print this command usage message
+     [-v]          verbose mode (default: off)
+     [-d]          debug mode (default: off)
+     [-a]          full path to dataset used as additional index in multi-index sorting
+     multiple values allowed
+     [-o outfile]  output file name (default: 'out_list.txt')
+     infile        input file name contains a list of HDF5 file names (required)
+    
+     This utility program re-order the files in infile into a sorted list based
+     on the increasing order of 'run' and 'subrun' IDs. Additional IDs can be used to sort with
+     argument -a. Eg, -a /rec.hdr/cycle.
+     Requirements for the input HDF5 files:
+     1. must contain datasets '/spill/run' and '/spill/subrun'
+     2. may contain multiple groups at root level
+     3. each group may contain multiple 2D datasets
+     4. 1st dimension of all datasets in the same group share the same size
+     5. each group must contain datasets 'run' and 'subrun'
+     6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
 Example run and output:

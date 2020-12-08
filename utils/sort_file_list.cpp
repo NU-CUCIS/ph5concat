@@ -40,7 +40,7 @@ static int verbose, debug;
     goto fn_exit; \
 }
 
-const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun"};
+const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun", "/rec.hdr/cycle"};
 
 struct compv {
   bool operator()(const std::vector<unsigned int>& lhs, const std::vector<unsigned int>& rhs)
@@ -88,6 +88,16 @@ struct op_data {
   }
 };
 
+/* string-based basename */
+std::string basename(std::string full_path)
+{
+  auto pos = full_path.find_last_of("/\\");
+  if(pos != string::npos)
+    return full_path.substr(pos+1);
+  else
+    return full_path;
+}
+
 /*----< get_IDs() >----------------------------------------------------------*/
 /* call back function used in H5Ovisit() */
 static
@@ -101,9 +111,10 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
     hsize_t dset_dims[2];
     int ndims, err_exit=0;
     size_t i;
+
     struct op_data *it_op = (struct op_data*)op;
     unsigned int *buf;
-    int level_idx;
+
 
     it_op->err = 0;
 
@@ -113,21 +124,22 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
     char *path = strdup(name);
     char *dset_name = basename(path);
 
-    /* placeholder for level names */
-    char *level_name;
-    
+
     /* skip dataset that is not in list of index names
        Note: dset_name is compared to basename of the level index
              full path to ensure consistency within file.
 	     Importantly, the current group does not contain
 	     a matching dataset, this group will be skipped.
      */
-    bool skip = true;
-    for(auto eidx = 0u; eidx < it_op->names.size(); eidx++)
-      /* basename requires non-const char* so make a copy */
-      strncpy(level_name, it_op->names[eidx].c_str(), it_op->names[eidx].size());
-      skip &= strcmp(dset_name, level_name) != 0;      
-    if(skip) goto fn_exit;
+    int level_idx = -1;
+    for(auto eidx = 0u; eidx < it_op->names.size(); eidx++) {      
+      if((std::string) dset_name == basename(it_op->names[eidx]))
+	level_idx = eidx;
+
+    }
+    if(level_idx < 0) {
+      goto fn_exit;
+    }
 
     /* Open the dataset. Note that loc_id is not the dataset/group ID. */
     dset_id = H5Dopen(loc_id, name, H5P_DEFAULT);
@@ -157,7 +169,6 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
     err = H5Dclose(dset_id);
     if (err < 0) CALLBACK_ERROR("H5Dclose",name);
 
-    level_idx = it_op->index(dset_name);
 
     /* get the first value of level */
     if(! it_op->is_set[level_idx]) {
@@ -292,6 +303,7 @@ int main(int argc, char **argv)
 
 	if (debug) {
 	  it_op.reset();
+
 	/* Iterate all objects to collect run and subrun IDs */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
 	    err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, get_IDs,
@@ -303,6 +315,7 @@ int main(int argc, char **argv)
             if (err < 0) HANDLE_ERROR("H5Ovisit");
 #endif
 	    if (it_op.err < 0) HANDLE_ERROR("H5Ovisit");
+
 
 	    if (verbose) {
 	      printf("File %zd:", i);

@@ -188,7 +188,7 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
 
     delete [] buf;
 
- fn_exit:
+fn_exit:
     free(path);
 
     it_op->err = err_exit;
@@ -315,7 +315,7 @@ int main(int argc, char **argv)
 			    &it_op, H5O_INFO_ALL);
             if (err < 0) HANDLE_ERROR("H5Ovisit3");
 #else
-	    err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, get_IDs,
+            err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, get_IDs,
 			   &it_op);
             if (err < 0) HANDLE_ERROR("H5Ovisit");
 #endif
@@ -338,7 +338,7 @@ int main(int argc, char **argv)
             unsigned int run, subrun;
             hsize_t one[2]={1,1}, offs[2]={0,0}, lens[2]={1,1};
             hid_t dset_id, mem_space_id, file_space_id;
-	    
+
             mem_space_id = H5Screate_simple(2, lens, NULL);
             if (mem_space_id < 0) HANDLE_ERROR("H5Screate_simple");
 

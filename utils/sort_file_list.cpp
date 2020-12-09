@@ -59,43 +59,43 @@ typedef map<std::vector<unsigned int>, string, compv> tuple_map;
 
 /* parameters to be passed to the call back function */
 struct op_data {
-  std::vector<std::string> names;
-  std::vector<bool> is_set;
-  std::vector<unsigned int> event_index;
-  herr_t   err;
-  op_data(std::vector<std::string> _names) 
-    : names(_names) 
-  {    
-    is_set      = std::vector<bool        >(names.size(), false);
-    event_index = std::vector<unsigned int>(names.size(), 0    );
-  }
-  void add_level(std::string name)
-  {
-    names      .push_back(name);
-    is_set     .push_back(false);
-    event_index.push_back(0);
-  }
-  void reset()
-  {
-    for(auto iset = 0u; iset < is_set.size(); iset++)
-      is_set[iset] = false;
-  }
-  int index(std::string name) const
-  {
-    for(auto idx = 0; idx < names.size(); idx++) 
-      if(strcmp(name.c_str(), names[idx].c_str()) == 0) return idx;
-    return -1;
-  }
+    std::vector<std::string> names;
+    std::vector<bool> is_set;
+    std::vector<unsigned int> event_index;
+    herr_t   err;
+    op_data(std::vector<std::string> _names) 
+      : names(_names) 
+    {    
+      is_set      = std::vector<bool        >(names.size(), false);
+      event_index = std::vector<unsigned int>(names.size(), 0    );
+    }
+    void add_level(std::string name)
+    {
+      names      .push_back(name);
+      is_set     .push_back(false);
+      event_index.push_back(0);
+    }
+    void reset()
+    {
+      for(auto iset = 0u; iset < is_set.size(); iset++)
+        is_set[iset] = false;
+    }
+    int index(std::string name) const
+    {
+      for(auto idx = 0; idx < names.size(); idx++) 
+        if(strcmp(name.c_str(), names[idx].c_str()) == 0) return idx;
+      return -1;
+    }
 };
 
 /* string-based basename */
 std::string basename(std::string full_path)
 {
-  auto pos = full_path.find_last_of("/\\");
-  if(pos != string::npos)
-    return full_path.substr(pos+1);
-  else
-    return full_path;
+    auto pos = full_path.find_last_of("/\\");
+    if(pos != string::npos)
+      return full_path.substr(pos+1);
+    else
+      return full_path;
 }
 
 /*----< get_IDs() >----------------------------------------------------------*/
@@ -133,12 +133,12 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
      */
     int level_idx = -1;
     for(auto eidx = 0u; eidx < it_op->names.size(); eidx++) {      
-      if((std::string) dset_name == basename(it_op->names[eidx]))
-	level_idx = eidx;
-
+        if((std::string) dset_name == basename(it_op->names[eidx]))
+  	    level_idx = eidx;
+  
     }
     if(level_idx < 0) {
-      goto fn_exit;
+        goto fn_exit;
     }
 
     /* Open the dataset. Note that loc_id is not the dataset/group ID. */
@@ -172,18 +172,18 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
 
     /* get the first value of level */
     if(! it_op->is_set[level_idx]) {
-      it_op->is_set     [level_idx] = true;
-      it_op->event_index[level_idx] = buf[0];
+        it_op->is_set     [level_idx] = true;
+        it_op->event_index[level_idx] = buf[0];
     }
 
     /* check level in all groups for consistency */
     for(i=0; i<dset_dims[0]; i++) {
-      if(buf[i] != it_op->event_index[level_idx]) {
-	printf("Error: inconsistent %s ID %u, expecting %u\n",
-	       dset_name, it_op->event_index[level_idx]);
-	err_exit = -1;
-	goto fn_exit;
-      }
+        if(buf[i] != it_op->event_index[level_idx]) {
+	    printf("Error: inconsistent %s ID %u, expecting %u\n",
+		   dset_name, it_op->event_index[level_idx]);
+	    err_exit = -1;
+	    goto fn_exit;
+	}
     }
 
     delete [] buf;
@@ -219,7 +219,7 @@ usage(char *progname)
     6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-d|-o outfile|-a /additiona/index...] infile\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-d|-o outfile|-a /additional/index ...] infile\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
@@ -323,11 +323,11 @@ int main(int argc, char **argv)
 
 
 	    if (verbose) {
-	      printf("File %zd:", i);
-	      for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
-		printf(" %s ID = %d", it_op.names[eidx].c_str(), it_op.event_index[eidx]);
-	      }
-	      printf("\n");
+	        printf("File %zd:", i);
+		for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
+		  printf(" %s ID = %d", it_op.names[eidx].c_str(), it_op.event_index[eidx]);
+		}
+		printf("\n");
 	    }
 
             /* use sorted map in an increasing order of run and subrun */
@@ -343,36 +343,36 @@ int main(int argc, char **argv)
             if (mem_space_id < 0) HANDLE_ERROR("H5Screate_simple");
 
 	    for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
-	      /* open the dataset */
-	      dset_id = H5Dopen(file_id, it_op.names[eidx].c_str(), H5P_DEFAULT);
-	      if (dset_id < 0) HANDLE_ERROR("H5Dopen");
-	      
-	      
-	      file_space_id = H5Dget_space(dset_id);
-	      if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
-
-	      /* set the window */
-	      err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-					one, lens);
-	      if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
-
-	      /* read data */
-	      err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
-			    H5P_DEFAULT, &it_op.event_index[eidx]);
-	      if (err < 0) HANDLE_ERROR("H5Dread");
-
-	      err = H5Dclose(dset_id);
-	      if (err < 0) HANDLE_ERROR("H5Dclose");
-	      H5Sclose(file_space_id);
+	        /* open the dataset */
+	        dset_id = H5Dopen(file_id, it_op.names[eidx].c_str(), H5P_DEFAULT);
+	        if (dset_id < 0) HANDLE_ERROR("H5Dopen");
+	        
+	        
+	        file_space_id = H5Dget_space(dset_id);
+	        if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
+	        
+	        /* set the window */
+	        err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
+	        				one, lens);
+	        if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
+	        
+	        /* read data */
+	        err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
+	        		    H5P_DEFAULT, &it_op.event_index[eidx]);
+	        if (err < 0) HANDLE_ERROR("H5Dread");
+	        
+	        err = H5Dclose(dset_id);
+	        if (err < 0) HANDLE_ERROR("H5Dclose");
+	        H5Sclose(file_space_id);
 	    }
             H5Sclose(mem_space_id);
 
             if (verbose) {
-	      printf("File %zd:", i);
-	      for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
-		printf(" %s ID = %d", it_op.names[eidx].c_str(), it_op.event_index[eidx]);
-	      }
-	      printf("\n");
+	        printf("File %zd:", i);
+	        for(auto eidx = 0u; eidx < it_op.names.size(); eidx++) {
+		    printf(" %s ID = %d", it_op.names[eidx].c_str(), it_op.event_index[eidx]);
+	        }
+	        printf("\n");
 	    }
 
             /* use sorted map in an increasing order of run and subrun */

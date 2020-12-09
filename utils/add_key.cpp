@@ -76,6 +76,7 @@ double wtime(void)
 
 /* lookup table based on 3-tuple datasets */
 typedef std::vector<unsigned int> keyv;
+
 struct hashv : public unary_function<keyv, size_t> {
     size_t operator()(const keyv& key) const {
 	size_t h = 0;
@@ -93,6 +94,8 @@ struct hash3 : public unary_function<key, size_t> {
 };
 typedef unordered_map<keyv, int64_t, hashv> table;
 
+
+
 static
 table build_lookup_table(hsize_t       len,
 			 hsize_t       nlevels,
@@ -100,13 +103,12 @@ table build_lookup_table(hsize_t       len,
 {
     hsize_t i;
     table ret;
-
     
     for (i=0; i<len; i++) {
-	//for(auto ilvl = 0; ilvl < nlevels; ilvl++)
-	//    printf("%d\t", buf[i*nlevels + ilvl]);
-	//printf("\n");
-	ret[keyv(buf+i*nlevels, buf+(i+1)*nlevels)] = i;
+	keyv key(nlevels);
+	for(auto ilvl = 0; ilvl < nlevels; ilvl++)
+	    key[ilvl] = buf[len*ilvl + i];
+	ret[key] = i;
     }
 
     return ret;
@@ -174,7 +176,6 @@ herr_t add_seq(bool        dry_run,
     hsize_t bufdims[1], bufstride[1], bufoffset[1];
     unsigned int *run_buf, *srun_buf, *base_buf;
     int64_t *seq_buf;
-    hid_t memspace_base, memspace_run, memspace_srun;
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
 #endif
@@ -225,75 +226,32 @@ herr_t add_seq(bool        dry_run,
     run_buf  = (unsigned int*) malloc(bufdims[0] * sizeof(unsigned int));
     for(auto ibuf = 0u; ibuf < bufdims[0]; ibuf++) run_buf[ibuf] = 0;
     srun_buf = run_buf  + dset_dims[0];
-    base_buf = srun_buf + dset_dims[0];
-    
-    /* create memspace for base dataset */
-    memspace_base = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 2;
-    err = H5Sselect_hyperslab(memspace_base, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
-    if (err < 0) CALLBACK_ERROR("H5Sselect_hyperslab", base_name);
-    
+    base_buf = srun_buf + dset_dims[0];    
     
     /* read the entire base dataset */
-    err = H5Dread(base_id, H5T_NATIVE_UINT, memspace_base, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
-
+    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  run_buf + 2*dset_dims[0]);
     if (err < 0) CALLBACK_ERROR("H5Dread", base_name);
-
     if ((err = H5Dclose(base_id))  < 0) CALLBACK_ERROR("H5Dclose", base_name);
 
     /* open dataset run in this group */
     run_id = H5Dopen(grp_id, "run", H5P_DEFAULT);
     if (run_id < 0) CALLBACK_ERROR("H5Dopen", "run");
 
-    /* create memspace for run dataset */
-    memspace_run = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 0;
-    err = H5Sselect_hyperslab(memspace_run, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
-    if (err < 0) CALLBACK_ERROR("H5Sselect_hyperslab", "run");
-
     /* read the entire dataset run */
-    err = H5Dread(run_id, H5T_NATIVE_UINT, memspace_run, H5S_ALL, H5P_DEFAULT,
+    err = H5Dread(run_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                   run_buf);
-
     if (err < 0) CALLBACK_ERROR("H5Dread", "run");
-
     if ((err = H5Dclose(run_id))  < 0) CALLBACK_ERROR("H5Dclose", "run");
 
     /* open datasets subrun in this group */
     srun_id = H5Dopen(grp_id, "subrun", H5P_DEFAULT);
     if (srun_id < 0) CALLBACK_ERROR("H5Dopen", "subrun");
 
-    /* create memspace for run dataset */
-    memspace_srun = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 1;
-    err = H5Sselect_hyperslab(memspace_srun, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
-    if (err < 0) CALLBACK_ERROR("H5Sselect_hyperslab", "subrun");
-
     /* read the entire dataset subrun */
-    err = H5Dread(srun_id, H5T_NATIVE_UINT, memspace_srun, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
+    err = H5Dread(srun_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  run_buf+dset_dims[0]);
     if (err < 0) CALLBACK_ERROR("H5Dread", "subrun");
-
-
     if ((err = H5Dclose(srun_id)) < 0) CALLBACK_ERROR("H5Dclose", "subrun");
 
     GET_TIMER(ts, te, timing[0])
@@ -302,8 +260,12 @@ herr_t add_seq(bool        dry_run,
     seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
 
     /* table look up the seq values */
-    for (i=0; i<dset_dims[0]; i++)
-        seq_buf[i] = lookup_table[keyv(run_buf + i*3, run_buf + (i+1)*3)];
+    for (i=0; i<dset_dims[0]; i++) {
+	keyv key(3);
+	for(auto ilvl = 0; ilvl < 3; ilvl++)
+	    key[ilvl]  = run_buf[dset_dims[0]*ilvl + i];
+	seq_buf[i] = lookup_table[key];
+    }
 
     free(run_buf);
 
@@ -614,53 +576,20 @@ int main(int argc, char **argv)
     srun_buf = run_buf  + dset_dims[0];
     base_buf = srun_buf + dset_dims[0];
 
-    /* create memspace for run dataset */
-    memspace_run = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 0;
-    err = H5Sselect_hyperslab(memspace_run, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
 
     /* read the entire dataset /spill/run */
-    err = H5Dread(run_id, H5T_NATIVE_UINT, memspace_run, H5S_ALL, H5P_DEFAULT,
+    err = H5Dread(run_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
                   run_buf);
     if (err < 0) RETURN_ERROR("H5Dread", "/spill/run")
 
-    /* create memspace for run dataset */
-    memspace_srun = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 1;
-    err = H5Sselect_hyperslab(memspace_srun, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
-
     /* read the entire dataset /spill/subrun */
-    err = H5Dread(srun_id, H5T_NATIVE_UINT, memspace_srun, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
+    err = H5Dread(srun_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  run_buf+dset_dims[0]);
     if (err < 0) RETURN_ERROR("H5Dread", "/spill/subrun")
 
-    /* create memspace for run dataset */
-    memspace_base = H5Screate_simple(1, bufdims, NULL);
-    bufstride[0] = 3;
-    bufoffset[0] = 2;
-    err = H5Sselect_hyperslab(memspace_base, 
-			      H5S_SELECT_SET,
-			      bufoffset, 
-			      bufstride, 
-			      dset_dims,
-			      NULL);
-
-
     /* read the entire dataset /spill/base */
-    err = H5Dread(base_id, H5T_NATIVE_UINT, memspace_base, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
+    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                  run_buf+2*dset_dims[0]);
     if (err < 0) RETURN_ERROR("H5Dread", dset_name)
 
     /* close datasets */

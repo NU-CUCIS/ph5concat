@@ -75,7 +75,7 @@ double wtime(void)
 }
 
 /* lookup table based on 3-tuple datasets */
-typedef std::vector<unsigned int> keyv;
+typedef vector<unsigned int> keyv;
 
 struct hashv : public unary_function<keyv, size_t> {
     size_t operator()(const keyv& key) const {
@@ -94,6 +94,17 @@ struct hash3 : public unary_function<key, size_t> {
 };
 typedef unordered_map<keyv, int64_t, hashv> table;
 
+const vector<string> DEFAULT_INDEX_LEVELS = {"/spill/run", "/spill/subrun"};
+
+/* string-based basename */
+string basename(string full_path)
+{
+    auto pos = full_path.find_last_of("/\\");
+    if(pos != string::npos)
+      return full_path.substr(pos+1);
+    else
+      return full_path;
+}
 
 
 static
@@ -159,6 +170,7 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
 static
 herr_t add_seq(bool        dry_run,
                hid_t       file_id,
+	       vector<string> index_levels,
                const char *grp_name,
                const char *base_name,
                table       lookup_table,
@@ -171,11 +183,11 @@ herr_t add_seq(bool        dry_run,
     int ndims;
     size_t i;
     herr_t err;
-    hid_t grp_id, run_id, srun_id, base_id, dcpl_id, space_id, seq_id;
+    hid_t grp_id, level_id, base_id, dcpl_id, space_id, seq_id;
     hsize_t dset_dims[2], maxdims[2];
-    hsize_t bufdims[1], bufstride[1], bufoffset[1];
-    unsigned int *run_buf, *srun_buf, *base_buf;
+    unsigned int *buf;
     int64_t *seq_buf;
+
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
 #endif
@@ -221,38 +233,29 @@ herr_t add_seq(bool        dry_run,
         *avg_len += dset_dims[0];
     }
 
-    /* allocate buffers for run, subrun, base */
-    bufdims[0] = dset_dims[0] * 3;
-    run_buf  = (unsigned int*) malloc(bufdims[0] * sizeof(unsigned int));
-    for(auto ibuf = 0u; ibuf < bufdims[0]; ibuf++) run_buf[ibuf] = 0;
-    srun_buf = run_buf  + dset_dims[0];
-    base_buf = srun_buf + dset_dims[0];    
-    
-    /* read the entire base dataset */
+    /* allocate buffer */
+    buf  = (unsigned int*) malloc(dset_dims[0] * (index_levels.size()+1) * sizeof(unsigned int));
+
+    /* read the entire base dataset to the end of the buffer */
     err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf + 2*dset_dims[0]);
+                  buf + index_levels.size()*dset_dims[0]);
     if (err < 0) CALLBACK_ERROR("H5Dread", base_name);
-    if ((err = H5Dclose(base_id))  < 0) CALLBACK_ERROR("H5Dclose", base_name);
+    if ((err = H5Dclose(base_id))  < 0) CALLBACK_ERROR("H5Dclose", base_name);    
 
-    /* open dataset run in this group */
-    run_id = H5Dopen(grp_id, "run", H5P_DEFAULT);
-    if (run_id < 0) CALLBACK_ERROR("H5Dopen", "run");
+    /* read each index level into buffer */
+    for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
+	string level_basename = basename(index_levels[ilvl]);
+	
+	/* open dataset run in this group */
+	level_id = H5Dopen(grp_id, level_basename.c_str(), H5P_DEFAULT);
+	if (level_id < 0) CALLBACK_ERROR("H5Dopen", level_basename.c_str());
 
-    /* read the entire dataset run */
-    err = H5Dread(run_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
-    if (err < 0) CALLBACK_ERROR("H5Dread", "run");
-    if ((err = H5Dclose(run_id))  < 0) CALLBACK_ERROR("H5Dclose", "run");
-
-    /* open datasets subrun in this group */
-    srun_id = H5Dopen(grp_id, "subrun", H5P_DEFAULT);
-    if (srun_id < 0) CALLBACK_ERROR("H5Dopen", "subrun");
-
-    /* read the entire dataset subrun */
-    err = H5Dread(srun_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf+dset_dims[0]);
-    if (err < 0) CALLBACK_ERROR("H5Dread", "subrun");
-    if ((err = H5Dclose(srun_id)) < 0) CALLBACK_ERROR("H5Dclose", "subrun");
+	/* read the entire dataset run */
+	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+		      buf+ilvl*dset_dims[0]);
+	if (err < 0) CALLBACK_ERROR("H5Dread", level_basename.c_str());
+	if ((err = H5Dclose(level_id))  < 0) CALLBACK_ERROR("H5Dclose", level_basename.c_str());
+    }
 
     GET_TIMER(ts, te, timing[0])
 
@@ -261,13 +264,13 @@ herr_t add_seq(bool        dry_run,
 
     /* table look up the seq values */
     for (i=0; i<dset_dims[0]; i++) {
-	keyv key(3);
-	for(auto ilvl = 0; ilvl < 3; ilvl++)
-	    key[ilvl]  = run_buf[dset_dims[0]*ilvl + i];
+	keyv key(index_levels.size()+1);
+	for(auto ilvl = 0u; ilvl < key.size(); ilvl++)
+	    key[ilvl]  = buf[dset_dims[0]*ilvl + i];
 	seq_buf[i] = lookup_table[key];
     }
 
-    free(run_buf);
+    free(buf);
 
     GET_TIMER(ts, te, timing[1])
 
@@ -429,11 +432,10 @@ int main(int argc, char **argv)
     int c, err_exit=0, ndims;
     char msg[1024], *infile=NULL, dset_name[1024], *part_key_base=NULL;
     herr_t err;
-    hid_t file_id=-1, fapl_id=-1, run_id, srun_id, base_id, space_id;
+    hid_t file_id=-1, fapl_id=-1, level_id, base_id, space_id;
     hid_t memspace_base, memspace_run, memspace_srun;
     hsize_t dset_dims[2], maxdims[2];
-    hsize_t bufdims[1], bufstride[1], bufoffset[1];
-    unsigned int *run_buf=NULL, *srun_buf, *base_buf;
+    unsigned int *buf=NULL;
     H5G_info_t grp_info;
     size_t i, num_orig_groups=0, num_nonzero_groups=0;
     size_t max_seq=0, min_seq=0, avg_seq=0;
@@ -441,6 +443,7 @@ int main(int argc, char **argv)
     table lookup_table;
     regex_t regex;
     char * pattern = NULL;
+    vector<string> index_levels(DEFAULT_INDEX_LEVELS);
 
     struct op_data it_op;
     it_op.num_groups = 0;
@@ -550,11 +553,7 @@ int main(int argc, char **argv)
     printf("Collect group names               = %7.2f sec\n", timing[1]);
 #endif
 
-    /* open dataset /spill/run, /spill/subrun, /spill/base */
-    run_id = H5Dopen(file_id, "/spill/run", H5P_DEFAULT);
-    if (run_id < 0) RETURN_ERROR("H5Dopen", "/spill/run")
-    srun_id = H5Dopen(file_id, "/spill/subrun", H5P_DEFAULT);
-    if (srun_id < 0) RETURN_ERROR("H5Dopen", "/spill/subrun")
+    /* open dataset /spill/base */
     sprintf(dset_name, "/spill/%s", part_key_base);
     base_id = H5Dopen(file_id, dset_name, H5P_DEFAULT);
     if (base_id < 0) RETURN_ERROR("H5Dopen", dset_name)
@@ -570,32 +569,29 @@ int main(int argc, char **argv)
     /* allocate buffers for /spill/run, /spill/subrun, /spill/base
      * All 3 are of the same size, as they belong to the same group.
      */
+    buf  = (unsigned int*) malloc(dset_dims[0] * (index_levels.size()+1) * sizeof(unsigned int));
     
-    bufdims[0] = dset_dims[0] * 3;
-    run_buf  = (unsigned int*) malloc(bufdims[0] * sizeof(unsigned int));
-    srun_buf = run_buf  + dset_dims[0];
-    base_buf = srun_buf + dset_dims[0];
-
-
-    /* read the entire dataset /spill/run */
-    err = H5Dread(run_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf);
-    if (err < 0) RETURN_ERROR("H5Dread", "/spill/run")
-
-    /* read the entire dataset /spill/subrun */
-    err = H5Dread(srun_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf+dset_dims[0]);
-    if (err < 0) RETURN_ERROR("H5Dread", "/spill/subrun")
-
-    /* read the entire dataset /spill/base */
+    /* read the entire dataset /spill/base to the end of the buffer */
     err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  run_buf+2*dset_dims[0]);
-    if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+                  buf + index_levels.size() * dset_dims[0]);
+    if (err < 0) RETURN_ERROR("H5Dread", dset_name);
+    if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name);
 
-    /* close datasets */
-    if ((err = H5Dclose(run_id))  < 0) RETURN_ERROR("H5Dclose", "/spill/run")
-    if ((err = H5Dclose(srun_id)) < 0) RETURN_ERROR("H5Dclose", "/spill/subrun")
-    if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name)
+    /* loop over index levels and insert datasets into buffer */
+    for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
+	/* open index level dataset */
+
+	level_id = H5Dopen(file_id, index_levels[ilvl].c_str(), H5P_DEFAULT);
+	if (level_id < 0) RETURN_ERROR("H5Dopen", index_levels[ilvl]);
+
+	/* read the entire dataset */
+	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+		      buf + ilvl * dset_dims[0]);
+	if (err < 0) RETURN_ERROR("H5Dread", index_levels[ilvl].c_str());
+
+	/* close dataset */
+	if ((err = H5Dclose(level_id))  < 0) RETURN_ERROR("H5Dclose", index_levels[ilvl].c_str());
+    }
 
     GET_TIMER(ts, te, timing[2])
 #if defined PROFILE && PROFILE
@@ -604,10 +600,10 @@ int main(int argc, char **argv)
 
     /* build a lookup table based on datasets run, subrun, (+), and base */
     lookup_table = build_lookup_table(dset_dims[0], 
-				      3,
-				      run_buf);
+				      index_levels.size()+1,
+				      buf);
 
-    if (run_buf != NULL) free(run_buf);
+    if (buf != NULL) free(buf);
 
     GET_TIMER(ts, te, timing[3])
 #if defined PROFILE && PROFILE
@@ -618,7 +614,7 @@ int main(int argc, char **argv)
      * each group.
      */
     for (i=0; i<it_op.num_groups; i++) {
-        err = add_seq(dry_run, file_id, it_op.grp_names[i], part_key_base,
+        err = add_seq(dry_run, file_id, index_levels, it_op.grp_names[i], part_key_base,
                       lookup_table, &num_nonzero_groups, &max_seq, &min_seq,
                       &avg_seq, stime);
         if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[i])

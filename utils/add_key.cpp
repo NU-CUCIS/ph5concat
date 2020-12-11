@@ -398,6 +398,8 @@ usage(char *progname)
   [-h]          print this command usage message\n\
   [-v]          verbose mode (default: off)\n\
   [-n]          dry run without creating key datasets (default: disabled)\n\
+  -a dataset    full path to dataset used as additional index for calculating key\n\
+                multiple values allowed\n\
   -r pattern    groups matching pattern are not injected with base_name.seq\n\
   -k base_name  dataset name in group /spill to generate partitioning keys (required)\n\
   file_name     input/output HDF5 file name (required)\n\n\
@@ -420,6 +422,13 @@ usage(char *progname)
     5. each group must contain datasets run, subrun, and 'base_name'\n\
     6. the second dimension size of the 3 datasets must be 1\n\
     7. data type of the 3 datasets must be H5T_STD_U32LE\n\
+  Additional datasets can be added to the n-tuple for creating the key for data\n\
+  partitioning strategy. This dataset does not need to be contained in the /spill\n\
+  group, but does need to be contained in all other groups for which the partition\n\
+  key is calculated. An example from NOvA Monte Carlo files is /rec.hdr/cycle.\n\
+  In this case, cycle must be a valid dataset in each group where the partition key\n\
+  is injected, and the n-tuple used to create the key is\n\
+  {'run', 'subrun', 'cycle', base_name}.\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     printf("Usage: %s [-h|-v] -k base_name file_name\n%s\n", progname, USAGE);
@@ -459,7 +468,7 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvnr:k:")) != -1)
+    while ((c = getopt(argc, argv, "hvna:r:k:")) != -1)
         switch(c) {
             case 'h': usage(argv[0]);
                       err_exit = -1;
@@ -472,6 +481,8 @@ int main(int argc, char **argv)
                       break;
 	    case 'r': pattern = strdup(optarg);
 		      break;
+	    case 'a': index_levels.push_back(optarg);
+	              break;
             default: break;
         }
 
@@ -524,7 +535,7 @@ int main(int argc, char **argv)
         sprintf(msg, "Can't open input file %s\n", infile);
         HANDLE_ERROR(msg)
     }
-
+    
     GET_TIMER(ts, te, timing[0])
 #if defined PROFILE && PROFILE
     printf("Open input file                   = %7.2f sec\n", timing[0]);
@@ -577,16 +588,20 @@ int main(int argc, char **argv)
     if (err < 0) RETURN_ERROR("H5Dread", dset_name);
     if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name);
 
+    printf("buffer size (nelements): %d\n", dset_dims[0]*(index_levels.size()+1));
     /* loop over index levels and insert datasets into buffer */
     for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
-	/* open index level dataset */
+	printf("Index Level %d: %s\n", ilvl, index_levels[ilvl].c_str());
+	printf("\tbuffer range: (%d, %d)\n", ilvl*dset_dims[0], (ilvl+1)*dset_dims[0]-1);
 
+
+	/* open index level dataset */
 	level_id = H5Dopen(file_id, index_levels[ilvl].c_str(), H5P_DEFAULT);
 	if (level_id < 0) RETURN_ERROR("H5Dopen", index_levels[ilvl]);
 
 	/* read the entire dataset */
 	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-		      buf + ilvl * dset_dims[0]);
+		      buf + ilvl * dset_dims[0]); /* offset by multiples of the dataset size */
 	if (err < 0) RETURN_ERROR("H5Dread", index_levels[ilvl].c_str());
 
 	/* close dataset */

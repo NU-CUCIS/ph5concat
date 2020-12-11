@@ -43,16 +43,16 @@ static int verbose, debug;
 const std::vector<std::string> DEFAULT_LEVELS {"/spill/run", "/spill/subrun"};
 
 struct compv {
-  bool operator()(const std::vector<unsigned int>& lhs, const std::vector<unsigned int>& rhs)
-  {
-    assert(lhs.size() == rhs.size());
+    bool operator()(const std::vector<unsigned int>& lhs, const std::vector<unsigned int>& rhs)
+    {
+	assert(lhs.size() == rhs.size());
   
-    for(auto i = 0u; i < lhs.size(); i++) {
-      if(lhs[i] < rhs[i]) return true;
-      if(lhs[i] > rhs[i]) return false;
+	for(auto i = 0u; i < lhs.size(); i++) {
+	    if(lhs[i] < rhs[i]) return true;
+	    if(lhs[i] > rhs[i]) return false;
+	}
+	return false;
     }
-    return false;
-  }
 };
 
 typedef map<std::vector<unsigned int>, string, compv> tuple_map;
@@ -347,18 +347,17 @@ int main(int argc, char **argv)
 	        dset_id = H5Dopen(file_id, it_op.names[eidx].c_str(), H5P_DEFAULT);
 	        if (dset_id < 0) HANDLE_ERROR("H5Dopen");
 	        
-	        
 	        file_space_id = H5Dget_space(dset_id);
 	        if (file_space_id < 0) HANDLE_ERROR("H5Dget_space");
 	        
 	        /* set the window */
 	        err = H5Sselect_hyperslab(file_space_id, H5S_SELECT_SET, offs, NULL,
-	        				one, lens);
+					  one, lens);
 	        if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab");
 	        
 	        /* read data */
 	        err = H5Dread(dset_id, H5T_NATIVE_UINT, mem_space_id, file_space_id,
-	        		    H5P_DEFAULT, &it_op.event_index[eidx]);
+			      H5P_DEFAULT, &it_op.event_index[eidx]);
 	        if (err < 0) HANDLE_ERROR("H5Dread");
 	        
 	        err = H5Dclose(dset_id);

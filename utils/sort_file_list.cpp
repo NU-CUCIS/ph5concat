@@ -230,7 +230,7 @@ int main(int argc, char **argv)
             throw ios_base::failure(strerror(errno));
     }
     catch (ifstream::failure& e) {
-        cerr << "Error: opening file \""<<infile<<"\" (" << e.what() 
+        cerr << "Error: opening file \""<<infile<<"\" (" << e.what()
              << ")" << endl;
         err_exit = -1;
         goto fn_exit;
@@ -249,7 +249,7 @@ int main(int argc, char **argv)
 
     if (verbose)
         for (i=0; i<in_list.size(); i++)
-            cout << "input HDF5 file: "<< in_list[i] << '\n'; 
+            cout << "input HDF5 file: "<< in_list[i] << '\n';
 
     for (i=0; i<in_list.size(); i++) {
         /* open file in read-only mode */
@@ -331,6 +331,13 @@ int main(int argc, char **argv)
             if (verbose)
                 printf("File %zd: run ID = %d subrun ID = %u\n",i,run,subrun);
 
+            /* check if key(run, subrun) has already existed */
+            if (file_list.find(key(run, subrun)) != file_list.end()) {
+                cerr << "Error: key tuple (run=" << run << ", subrun=" << subrun << ") already exists\n\n";
+                err_exit = -1;
+                goto fn_exit;
+            }
+
             /* use sorted map in an increasing order of run and subrun */
             file_list[key(run, subrun)] = in_list[i];
         }
@@ -347,7 +354,7 @@ int main(int argc, char **argv)
             throw ios_base::failure(strerror(errno));
     }
     catch (ifstream::failure& e) {
-        cerr << "Error: creating file \""<<outfile<<"\" (" << e.what() 
+        cerr << "Error: creating file \""<<outfile<<"\" (" << e.what()
              << ")" << endl;
         err_exit = -1;
         goto fn_exit;
@@ -358,7 +365,7 @@ int main(int argc, char **argv)
 
     /* print the sorted file names to the output file */
     for (auto f = file_list.begin(); f != file_list.end(); f++)
-        out_fd << f->second << '\n'; 
+        out_fd << f->second << '\n';
 
     out_fd.close();
 

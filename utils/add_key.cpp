@@ -36,7 +36,7 @@ static int verbose;
 
 #include <sys/time.h>
 static
-double wtime(void) 
+double wtime(void)
 {
     double          now_time;
     struct timeval  etstart;

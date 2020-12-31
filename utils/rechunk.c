@@ -586,6 +586,7 @@ int main(int argc, char **argv)
     it_op.chunk_unit_2D  = 128;     /* default chunk size for 2D datasets */
     it_op.chunk_unit_MB  = 0;       /* chunk base size in MiB for 1D datasets */
     it_op.io_buf_size    = 1073741824; /* default I/O buffer size */
+    it_op.io_buf         = NULL;       /* I/O buffer */
     it_op.num_1D_dset    = 0;     /* number of 1D datasets */
     it_op.num_2D_dset    = 0;     /* number of 2D datasets */
     it_op.num_nonzero_1D = 0;     /* number of non-zero 1D datasets */
@@ -760,7 +761,7 @@ fn_exit:
         if (err < 0) printf("Error at line %d: H5Pclose\n",__LINE__);
     }
 
-    free(it_op.io_buf);
+    if (it_op.io_buf != NULL) free(it_op.io_buf);
     if (outfile != NULL) free(outfile);
     if (infile  != NULL) free(infile);
     GET_TIMER(ts, te, timing[3])

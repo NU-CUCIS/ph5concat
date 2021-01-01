@@ -56,7 +56,8 @@ Concatenator::Concatenator(int           nprocs,
     output_file_name(output),
     part_key_base(part_key_base)
 {
-    chunk_size_threshold = 1*1024*1024; // Chunk size threshold (1 MiB or 1 M elements)
+    // chunk_size_threshold = 1*1024*1024; // Chunk size threshold (1 MiB or 1 M elements)
+    chunk_size_threshold = 256*1024; // Chunk size threshold (256K elements)
     in_memory_cache_size = 512*1024*1024ull; // In-memory buffer increase (512 MiB)
     output_meta_cache_size = 128*1024*1024; // metadata cache size (128 MiB)
     raw_chunk_cache_size = 64*1024*1024; // raw chunk cache size (64 MiB)

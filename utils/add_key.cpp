@@ -597,7 +597,7 @@ int main(int argc, char **argv)
 
 	/* open index level dataset */
 	level_id = H5Dopen(file_id, index_levels[ilvl].c_str(), H5P_DEFAULT);
-	if (level_id < 0) RETURN_ERROR("H5Dopen", index_levels[ilvl]);
+	if (level_id < 0) RETURN_ERROR("H5Dopen", index_levels[ilvl].c_str());
 
 	/* read the entire dataset */
 	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,

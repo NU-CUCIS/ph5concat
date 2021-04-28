@@ -18,9 +18,63 @@
 #include <libgen.h> /* dirname() */
 #include <sys/time.h>
 #include <time.h>
+
 #include "ph5_concat.hpp"
 
+
+#include <stdlib.h>
+#include <stdio.h>
+/*
+* Look for lines in the procfile contents like: 
+* VmRSS:         5560 kB
+* VmSize:         5560 kB
+*
+* Grab the number between the whitespace and the "kB"
+* If 1 is returned in the end, there was a serious problem 
+* (we could not find one of the memory usages)
+*/
+int get_memory_usage_kb(long* vmrss_kb, long* vmsize_kb)
+{
+    /* Get the the current process' status file from the proc filesystem */
+    FILE* procfile = fopen("/proc/self/status", "r");
+
+    long to_read = 8192;
+    char buffer[to_read];
+    int read = fread(buffer, sizeof(char), to_read, procfile);
+    fclose(procfile);
+
+    short found_vmrss = 0;
+    short found_vmsize = 0;
+    char* search_result;
+
+    /* Look through proc status contents line by line */
+    char delims[] = "\n";
+    char* line = strtok(buffer, delims);
+
+    while (line != NULL && (found_vmrss == 0 || found_vmsize == 0) )
+    {
+        search_result = strstr(line, "VmRSS:");
+        if (search_result != NULL)
+        {
+            sscanf(line, "%*s %ld", vmrss_kb);
+            found_vmrss = 1;
+        }
+
+        search_result = strstr(line, "VmSize:");
+        if (search_result != NULL)
+        {
+            sscanf(line, "%*s %ld", vmsize_kb);
+            found_vmsize = 1;
+        }
+
+        line = strtok(NULL, delims);
+    }
+
+    return (found_vmrss == 1 && found_vmsize == 1) ? 0 : 1;
+}
+
 #if defined PROFILE && PROFILE
+    #define GET_MEM(vmrss, vmsize) {get_memory_usage_kb(&vmrss, &vmsize);}
     #define SET_TIMER(ts) { MPI_Barrier(MPI_COMM_WORLD); ts = MPI_Wtime(); }
     #define GET_TIMER(ts, t) { t = MPI_Wtime() - ts; }
     #define PRN_TIMER(t, msg) { \
@@ -199,6 +253,24 @@ int main(int argc, char **argv)
     size_t offset, length, remainder;
 #if defined PROFILE && PROFILE
     double ts, step_time[8], max_time[10];
+    long step_vmrss[9], step_vmsize[9];
+    long total_vmrss[9], total_vmsize[9];
+    long min_vmrss[9], min_vmsize[9];
+    long avg_vmrss[9], avg_vmsize[9];
+    long max_vmrss[9], max_vmsize[9];
+
+
+
+    memset(step_vmrss , 0, 9 * sizeof(long));
+    memset(step_vmsize, 0, 9 * sizeof(long));    
+    memset(total_vmrss  , 0, 9 * sizeof(long));
+    memset(total_vmsize , 0, 9 * sizeof(long));    
+    memset(min_vmrss  , 0, 9 * sizeof(long));
+    memset(min_vmsize , 0, 9 * sizeof(long));
+    memset(max_vmrss  , 0, 9 * sizeof(long));
+    memset(max_vmsize , 0, 9 * sizeof(long));
+		
+
 #endif
 
     MPI_Init(&argc, &argv);
@@ -277,6 +349,8 @@ int main(int argc, char **argv)
         }
     }
 
+    GET_MEM(step_vmrss[0], step_vmsize[0])
+    
     /* Collect all metadata from input files */
 #if defined HAS_H5GET_ALLOC_STATS && HAS_H5GET_ALLOC_STATS
     size_t cur_bytes, md_malloc;
@@ -290,6 +364,7 @@ int main(int argc, char **argv)
     }
     GET_TIMER(ts, step_time[0])
     PRN_TIMER(step_time[0], "Read metadata from input files")
+    GET_MEM(step_vmrss[1], step_vmsize[1])
 #if defined HAS_H5GET_ALLOC_STATS && HAS_H5GET_ALLOC_STATS
     H5get_alloc_stats(NULL, &md_malloc, NULL, NULL, NULL, NULL, NULL);
     md_malloc -= cur_bytes;
@@ -304,7 +379,8 @@ int main(int argc, char **argv)
     }
     GET_TIMER(ts, step_time[1])
     PRN_TIMER(step_time[1], "Create output file + datasets")
-
+    GET_MEM(step_vmrss[2], step_vmsize[2])
+      
     if (opt.io_strategy == 1) {
         /* Concatenate 1D datasets first */
         SET_TIMER(ts)
@@ -315,6 +391,7 @@ int main(int argc, char **argv)
         }
         GET_TIMER(ts, step_time[2])
         PRN_TIMER(step_time[2], "Concatenating 1D datasets")
+	GET_MEM(step_vmrss[3], step_vmsize[3])
 
         if (opt.part_key_base.compare("") != 0) {
             SET_TIMER(ts)
@@ -326,6 +403,7 @@ int main(int argc, char **argv)
             }
             GET_TIMER(ts, step_time[3])
             PRN_TIMER(step_time[3], "Write partition key datasets")
+	    GET_MEM(step_vmrss[4], step_vmsize[4])
         }
 
         err = concat.close_input_files();
@@ -343,6 +421,7 @@ int main(int argc, char **argv)
         }
         GET_TIMER(ts, step_time[4])
         PRN_TIMER(step_time[4], "Concatenating 2D datasets")
+	GET_MEM(step_vmrss[5], step_vmsize[5])
     }
     else if (opt.io_strategy == 2) {
         /* Concatenate 1D datasets first */
@@ -354,6 +433,7 @@ int main(int argc, char **argv)
         }
         GET_TIMER(ts, step_time[2])
         PRN_TIMER(step_time[2], "Concatenating 1D datasets")
+	GET_MEM(step_vmrss[3], step_vmsize[3])
 
         if (opt.part_key_base.compare("") != 0) {
             SET_TIMER(ts)
@@ -365,6 +445,7 @@ int main(int argc, char **argv)
             }
             GET_TIMER(ts, step_time[3])
             PRN_TIMER(step_time[3], "Writ partition key datasets")
+	    GET_MEM(step_vmrss[4], step_vmsize[4])
         }
 
         /* Concatenate 2D datasets */
@@ -376,6 +457,7 @@ int main(int argc, char **argv)
         }
         GET_TIMER(ts, step_time[4])
         PRN_TIMER(step_time[4], "Concatenating 2D datasets")
+	GET_MEM(step_vmrss[5], step_vmsize[5])
     }
 
     /* close all input files */
@@ -383,12 +465,14 @@ int main(int argc, char **argv)
     concat.close_input_files();
     GET_TIMER(ts, step_time[5])
     PRN_TIMER(step_time[5], "Close input files")
+    GET_MEM(step_vmrss[6], step_vmsize[6])
 
     /* close output file */
     SET_TIMER(ts)
     concat.close_output_file();
     GET_TIMER(ts, step_time[6])
     PRN_TIMER(step_time[6], "Close output files")
+    GET_MEM(step_vmrss[7], step_vmsize[7])
 
 #if defined PROFILE && PROFILE
     /* calculate total time spent on each process */
@@ -398,6 +482,68 @@ int main(int argc, char **argv)
     /* find the max timings among all processes */
     MPI_Reduce(step_time, max_time, 8, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     for (int i=0; i<8; i++) step_time[i] = max_time[i];
+
+    /* aggregate all memory snapshots */
+    MPI_Reduce(&step_vmrss[0], &total_vmrss[0], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[1], &total_vmrss[1], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[2], &total_vmrss[2], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[3], &total_vmrss[3], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[4], &total_vmrss[4], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[5], &total_vmrss[5], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[6], &total_vmrss[6], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[7], &total_vmrss[7], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    total_vmrss[8] = 0;
+    for (int i=0; i<8; i++) total_vmrss[8] = std::max(total_vmrss[8], total_vmrss[i]);
+    for (int i=0; i<8; i++) avg_vmrss[i] = total_vmrss[i] / nprocs;
+    
+    MPI_Reduce(&step_vmsize[0], &total_vmsize[0], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[1], &total_vmsize[1], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[2], &total_vmsize[2], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[3], &total_vmsize[3], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[4], &total_vmsize[4], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[5], &total_vmsize[5], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[6], &total_vmsize[6], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[7], &total_vmsize[7], 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    total_vmsize[8] = 0;
+    for (int i=0; i<8; i++) total_vmsize[8] = std::max(total_vmsize[8], total_vmsize[i]);
+    for (int i=0; i<8; i++) avg_vmsize[i] = total_vmsize[i] / nprocs;
+
+    MPI_Reduce(&step_vmrss[0], &min_vmrss[0], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[1], &min_vmrss[1], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[2], &min_vmrss[2], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[3], &min_vmrss[3], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[4], &min_vmrss[4], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[5], &min_vmrss[5], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[6], &min_vmrss[6], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[7], &min_vmrss[7], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    
+    MPI_Reduce(&step_vmsize[0], &min_vmsize[0], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[1], &min_vmsize[1], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[2], &min_vmsize[2], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[3], &min_vmsize[3], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[4], &min_vmsize[4], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[5], &min_vmsize[5], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[6], &min_vmsize[6], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[7], &min_vmsize[7], 1, MPI_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+
+    MPI_Reduce(&step_vmrss[0], &max_vmrss[0], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[1], &max_vmrss[1], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[2], &max_vmrss[2], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[3], &max_vmrss[3], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[4], &max_vmrss[4], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[5], &max_vmrss[5], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[6], &max_vmrss[6], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmrss[7], &max_vmrss[7], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    
+    MPI_Reduce(&step_vmsize[0], &max_vmsize[0], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[1], &max_vmsize[1], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[2], &max_vmsize[2], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[3], &max_vmsize[3], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[4], &max_vmsize[4], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[5], &max_vmsize[5], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[6], &max_vmsize[6], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&step_vmsize[7], &max_vmsize[7], 1, MPI_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+
 
     double local_time[10];
     local_time[0]  = concat.c_1d_2d;
@@ -430,7 +576,7 @@ int main(int argc, char **argv)
         printf("Parallel I/O strategy:                   %d\n", opt.io_strategy);
         printf("Use POSIX I/O to open file:              %s\n",opt.posix_open?"ON":"OFF");
         printf("POSIX In-memory I/O:                     %s\n",opt.in_memory_io?"ON":"OFF");
-        printf("1-process-create-followed-by-all-open:   %s\n",opt.one_process_create?"ON":"OFF");
+	printf("1-process-create-followed-by-all-open:   %s\n",opt.one_process_create?"ON":"OFF");
         printf("Chunk caching for raw data:              %s\n",opt.chunk_caching?"ON":"OFF");
         printf("GZIP level:                              %d\n",opt.zip_level);
         if (opt.compress_threshold > 0)
@@ -474,6 +620,30 @@ int main(int argc, char **argv)
         printf("Close  input files:                  %9.4f\n", step_time[5]);
         printf("Close output files:                  %9.4f\n", step_time[6]);
         printf("End-to-end:                          %9.4f\n", step_time[7]);
+	printf("-- Memory stats (MB) ----------------------------------------\n");
+	printf("                                             %12s %12s %12s\n", "Min", "Avg", "Max");
+	printf("Initialization:                      VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [0] / 1024, avg_vmrss [0] / 1024, max_vmrss [0] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[0] / 1024, avg_vmsize[0] / 1024, max_vmsize[0] / 1024);
+	printf("Read metadata from input files:      VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [1] / 1024, avg_vmrss [1] / 1024, max_vmrss [1] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[1] / 1024, avg_vmsize[1] / 1024, max_vmsize[1] / 1024);
+        printf("Create output file + datasets:       VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [2] / 1024, avg_vmrss [2] / 1024, max_vmrss [2] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[2] / 1024, avg_vmsize[2] / 1024, max_vmsize[2] / 1024);
+        printf("Concatenate small datasets:          VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [3] / 1024, avg_vmrss [3] / 1024, max_vmrss [3] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[3] / 1024, avg_vmsize[3] / 1024, max_vmsize[3] / 1024);
+        if (opt.part_key_base.compare("") != 0) {
+	  printf("Write to partition key datasets:     VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [4] / 1024, avg_vmrss [4] / 1024, max_vmrss [4] / 1024);
+	  printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[4] / 1024, avg_vmsize[4] / 1024, max_vmsize[4] / 1024);
+	}
+        printf("Concatenate large datasets:          VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [5] / 1024, avg_vmrss [5] / 1024, max_vmrss [5] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[5] / 1024, avg_vmsize[5] / 1024, max_vmsize[5] / 1024);
+        printf("Close  input files:                  VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [6] / 1024, avg_vmrss [6] / 1024, max_vmrss [6] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[6] / 1024, avg_vmsize[6] / 1024, max_vmsize[6] / 1024);
+        printf("Close output files:                  VmRSS : %12.4ld %12.4ld %12.4ld\n", min_vmrss [7] / 1024, avg_vmrss [7] / 1024, max_vmrss [7] / 1024);
+	printf("                                     VmSize: %12.4ld %12.4ld %12.4ld\n", min_vmsize[7] / 1024, avg_vmsize[7] / 1024, max_vmsize[7] / 1024);
+        printf("Totals :                             VmRSS : %12s %12s %12.4ld\n", "","", total_vmrss [8] / 1024);
+	printf("                                     VmSize: %12s %12s %12.4ld\n", "","", total_vmsize[8] / 1024);
+	
+	
         printf("\n");
     }
 

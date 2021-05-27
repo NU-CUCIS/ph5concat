@@ -40,8 +40,9 @@ int get_memory_usage_kb(long* vmrss_kb, long* vmsize_kb)
 
     long to_read = 8192;
     char buffer[to_read];
-    int read = fread(buffer, sizeof(char), to_read, procfile);
+    int nRead = fread(buffer, sizeof(char), to_read, procfile);
     fclose(procfile);
+    if (nRead < 0) return 1;
 
     short found_vmrss = 0;
     short found_vmsize = 0;
@@ -103,10 +104,10 @@ public:
     bool posix_open;
     bool in_memory_io;
     bool chunk_caching;
-    bool enforce_contiguous;
     int  io_strategy;
     size_t compress_threshold;
     unsigned int zip_level;
+    bool enforce_contiguous;
     size_t buffer_size;
     vector<string> input_files;
     string input_dirname;

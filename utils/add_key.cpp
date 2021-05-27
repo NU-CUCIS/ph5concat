@@ -80,7 +80,7 @@ typedef vector<unsigned int> keyv;
 struct hashv : public unary_function<keyv, size_t> {
     size_t operator()(const keyv& key) const {
 	size_t h = 0;
-	for(auto ikey = 0; ikey < key.size(); ikey++)
+	for(size_t ikey = 0; ikey < key.size(); ikey++)
 	    h ^= key[ikey];
 	return h;
     }
@@ -117,7 +117,7 @@ table build_lookup_table(hsize_t       len,
     
     for (i=0; i<len; i++) {
 	keyv key(nlevels);
-	for(auto ilvl = 0; ilvl < nlevels; ilvl++)
+	for(size_t ilvl = 0; ilvl < nlevels; ilvl++)
 	    key[ilvl] = buf[len*ilvl + i];
 	ret[key] = i;
     }
@@ -442,7 +442,6 @@ int main(int argc, char **argv)
     char msg[1024], *infile=NULL, dset_name[1024], *part_key_base=NULL;
     herr_t err;
     hid_t file_id=-1, fapl_id=-1, level_id, base_id, space_id;
-    hid_t memspace_base, memspace_run, memspace_srun;
     hsize_t dset_dims[2], maxdims[2];
     unsigned int *buf=NULL;
     H5G_info_t grp_info;
@@ -588,11 +587,11 @@ int main(int argc, char **argv)
     if (err < 0) RETURN_ERROR("H5Dread", dset_name);
     if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name);
 
-    printf("buffer size (nelements): %d\n", dset_dims[0]*(index_levels.size()+1));
+    printf("buffer size (nelements): %llu\n", dset_dims[0]*(index_levels.size()+1));
     /* loop over index levels and insert datasets into buffer */
     for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
-	printf("Index Level %d: %s\n", ilvl, index_levels[ilvl].c_str());
-	printf("\tbuffer range: (%d, %d)\n", ilvl*dset_dims[0], (ilvl+1)*dset_dims[0]-1);
+	printf("Index Level %u: %s\n", ilvl, index_levels[ilvl].c_str());
+	printf("\tbuffer range: (%llu, %llu)\n", ilvl*dset_dims[0], (ilvl+1)*dset_dims[0]-1);
 
 
 	/* open index level dataset */

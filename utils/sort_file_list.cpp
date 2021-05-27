@@ -375,7 +375,7 @@ int main(int argc, char **argv)
 	    }
 
             /* check if key(run, subrun) has already existed */
-            if (file_list.find(key(run, subrun)) != file_list.end()) {
+            if (file_list.find(it_op.event_index) != file_list.end()) {
                 cerr << "Error: key tuple (run=" << run << ", subrun=" << subrun << ") already exists\n\n";
                 err_exit = -1;
                 goto fn_exit;

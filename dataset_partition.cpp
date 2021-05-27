@@ -104,7 +104,6 @@ int Concatenator::concat_large_datasets(vector<string> const &inputs)
     int err_exit=0;
     size_t ii, jj, kk;
     herr_t err;
-    hid_t file_id;
 
 #if defined PROFILE_HDF5_INTERNAL && PROFILE_HDF5_INTERNAL
     MPI_Barrier(comm);
@@ -115,9 +114,6 @@ int Concatenator::concat_large_datasets(vector<string> const &inputs)
     /* All processes open all input files in MPI-I/O mode, and read large
      * datasets collectively */
     open_input_files(inputs, true);
-
-    /* Retrieve the file handle of output file */
-    file_id = output_file_id;
 
     for (ii=0; ii<num_groups; ii++) {
         for (jj=0; jj<groups[ii].num_dsets; jj++) {

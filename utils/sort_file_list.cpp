@@ -180,7 +180,7 @@ herr_t get_IDs(hid_t             loc_id,/* object ID */
     for(i=0; i<dset_dims[0]; i++) {
         if(buf[i] != it_op->event_index[level_idx]) {
 	    printf("Error: inconsistent %s ID %u, expecting %u\n",
-		   dset_name, it_op->event_index[level_idx]);
+		   dset_name, buf[i], it_op->event_index[level_idx]);
 	    err_exit = -1;
 	    goto fn_exit;
 	}
@@ -375,7 +375,7 @@ int main(int argc, char **argv)
 	    }
 
             /* check if key(run, subrun) has already existed */
-            if (file_list.find(key(run, subrun)) != file_list.end()) {
+            if (file_list.find(it_op.event_index) != file_list.end()) {
                 cerr << "Error: key tuple (run=" << run << ", subrun=" << subrun << ") already exists\n\n";
                 err_exit = -1;
                 goto fn_exit;

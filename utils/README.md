@@ -12,7 +12,7 @@
 ## rechunk
 
 **rechunk** is a utility program running in sequential. Given an input HDF5
-file, it copies all data groups and datsets in the input file to a new file
+file, it copies all data groups and datasets in the input file to a new file
 where the datasets in the new file use an adjust chunk setting. The new chunk
 settings are described below in the command usage. The input HDF5 file should
 come from [NOvA experiments](https://www.hep.ucl.ac.uk/nova/)
@@ -96,7 +96,7 @@ existing datasets in the same group: `run`, `subrun`, and `base_name`. The
 3-tuple (run[i], subrun[i], base_name[i]) forms a unique ID. Data elements with
 the same ID are assigned to the same MPI processes when the file is read in
 parallel. The 3-tuple (run, subrun, base) works similarly to the primary key in
-relational database to uniquely identify a data element. Generation of
+the relational database that uniquely identifies a data element. Generation of
 `base_name.seq` is described as followed.
 
 At first, datasets `run`, `subrun`, and `base_name` in group `spill` are used
@@ -112,7 +112,7 @@ value if their 3-tuples are the same.
 Note the integer numbers in `base_name.seq` in all groups, except group
 'spill', are in a monotonically nondecreasing order. Values can be repeated.
 In group 'spill', the values in `base_name.seq` will start from 0 and increment
-by 1.
+by 1, with no repeated value.
 
 Command usage:
   ```
@@ -142,7 +142,7 @@ Command usage:
       4. all datasets in the same group share the 1st dimension size
       5. each group must contain datasets run, subrun, and 'base_name'
       6. the second dimension size of the 3 daatsets must be 1
-      7. data type of the 3 datasets msut be H5T_STD_U32LE
+      7. data type of the 3 datasets must be H5T_STD_U32LE
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
 Example run and output:

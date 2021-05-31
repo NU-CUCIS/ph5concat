@@ -899,27 +899,37 @@ void Concatenator::accumulate_dimensions()
 /*----< calculate_chunk_size() >---------------------------------------------*/
 void Concatenator::calculate_chunk_size(DSInfo_t &dset)
 {
+    size_t chunk_len;
+
     /* no zero-sized dataset should call this subroutine */
     assert(dset.global_dims[0] > 0);
 
+    /* no chunking along the 2nd dimension */
     dset.chunk_dims[1] = dset.global_dims[1];
 
-    if (dset.global_dims[1] == 1) { /* 1D dataset */
-        /* use whichever is smaller */
-        size_t chunk_len;
 #define USE_NELEM_BASED_CHUNKING
 #ifdef USE_NELEM_BASED_CHUNKING
-        chunk_len = chunk_size_threshold;
+    chunk_len = chunk_size_threshold;
 #else
-        chunk_len = chunk_size_threshold / dset.type_size;
+    chunk_len = chunk_size_threshold / dset.type_size;
 #endif
+
+#if 0
+    /* set chunk size to global dim size if smaller than the threshold */
+    if (dset.global_dims[1] == 1) /* 1D dataset */
+        /* use whichever is smaller */
         dset.chunk_dims[0] = (dset.global_dims[0] < chunk_len) ?
                               dset.global_dims[0] : chunk_len;
-    }
-    else { /* 2D dataset */
+    else /* 2D dataset */
         dset.chunk_dims[0] = (dset.global_dims[0] < 128) ?
                               dset.global_dims[0] : 128;
-    }
+#else
+    /* no matter the dim size if larger or smaller than the threshold */
+    if (dset.global_dims[1] == 1) /* 1D dataset */
+        dset.chunk_dims[0] = chunk_len;
+    else /* 2D dataset */
+        dset.chunk_dims[0] = 128;
+#endif
 
     dset.chunk_size = dset.chunk_dims[0] * dset.chunk_dims[1]
                     * dset.type_size;

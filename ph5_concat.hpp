@@ -99,13 +99,15 @@ class Concatenator {
 public:
     Concatenator(int nprocs, int rank, MPI_Comm comm, MPI_Info info,
                  size_t num_input_files, string const& output,
-                 bool posix_open, bool in_memory_io, bool chunk_caching,
-                 size_t compress_threshold, bool one_process_create,
-                 unsigned int zip_level, bool enforce_contiguous,
-                 size_t buffer_size, int io_strategy, string const& part_key_base);
+                 bool append_mode, bool posix_open, bool in_memory_io,
+                 bool chunk_caching, size_t compress_threshold,
+                 bool one_process_create, unsigned int zip_level,
+                 bool enforce_contiguous, size_t buffer_size, int io_strategy,
+                 string const& part_key_base);
     ~Concatenator();
     int construct_metadata(vector<string> const &inputs);
     int file_create();
+    int file_open();
 
     /* File-based partitioning (all datasets are read independently, but
      * written collectively) */
@@ -209,6 +211,9 @@ private:
 
     /* create an HDF5 dataset object */
     int create_dataset(hid_t group_id, DSInfo_t &dset_info, bool toFill);
+
+    /* open an HDF5 dataset object */
+    int open_dataset(hid_t group_id, DSInfo_t &dset_info);
 
     /* Create partitioning key dataset and add to its group */
     int create_partition_key(GrpInfo &grp);

@@ -20,6 +20,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef HAVE_ACCESS
+#include <unistd.h>  /* access() */
+#endif
+
 #include "ph5_concat.hpp"
 
 /*----< Concatenator() >-----------------------------------------------------*/
@@ -29,6 +33,7 @@ Concatenator::Concatenator(int           nprocs,
                            MPI_Info      info,
                            size_t        num_input_files,
                            string const& output,
+                           bool          append_mode,
                            bool          posix_open,
                            bool          in_memory_io,
                            bool          chunk_caching,
@@ -176,6 +181,7 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
 
     /* Go through all assigned input files and collect all metadata. */
     if (posix_open == true) {
+        /* use POSIX I/O mode to open and read each file */
         if (in_memory_io == true) {
             fapl_id = H5Pcreate(H5P_FILE_ACCESS);
             if (fapl_id < 0) HANDLE_ERROR("H5Pcreate")
@@ -197,8 +203,8 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
             fapl_id = H5P_DEFAULT;
         }
     } else {
-        /* MPI-IO open. Note HDF5 in-memory I/O feature is not available when
-         * using MPI-IO driver
+        /* Use MPI-IO mode to open files. Note HDF5 in-memory I/O feature is
+         * not available when using MPI-IO driver
          */
         fapl_id = H5Pcreate(H5P_FILE_ACCESS);
         if (fapl_id < 0) HANDLE_ERROR("H5Pcreate")
@@ -218,7 +224,9 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
         file_id = H5Fopen(it->c_str(), H5F_ACC_RDONLY, fapl_id);
         if (file_id < 0) HANDLE_ERROR("H5Fopen")
 
-        /* iterate all data objects to collect their metadata */
+        /* iterate all data objects (groups and datasets in each group) to
+         * collect their metadata
+         */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
         err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this, H5O_INFO_ALL);
         if (err < 0) HANDLE_ERROR("H5Ovisit3")
@@ -337,7 +345,7 @@ int Concatenator::create_partition_key(GrpInfo &grp)
 /*----< file_create() >------------------------------------------------------*/
 int Concatenator::file_create()
 {
-    int err_exit=0;
+    int err_exit=0, file_exist=1;
     size_t ii, jj, kk;
     herr_t err;
     hid_t group_id=0, fapl_id;
@@ -361,6 +369,19 @@ int Concatenator::file_create()
 
     err = H5Pset_coll_metadata_write(fapl_id, true);
     if (err < 0) HANDLE_ERROR("H5Pset_coll_metadata_write")
+
+#ifdef HAVE_ACCESS
+    /* if access() is available, use it to check whether file already exists
+     * rank 0 calls access() and broadcasts file_exist */
+    if (rank == 0 && access(output_file_name.c_str(), F_OK) == -1)
+        file_exist = 0;
+
+    MPI_Bcast(&file_exist, 1, MPI_INT, 0, comm);
+    if (file_exist) {
+        cout<<output_file_name.c_str()<<" already exists." <<endl;
+        return -1;
+    }
+#endif
 
     if (one_process_create == true) {
         /* Root process creates the file first, followed by all other processes
@@ -577,6 +598,179 @@ fn_exit:
     return err_exit;
 }
 
+/*----< file_open() >--------------------------------------------------------*/
+int Concatenator::file_open()
+{
+    int err_exit=0, file_exist=1;
+    size_t ii, jj, kk;
+    herr_t err;
+    hid_t group_id=0, fapl_id;
+
+#if defined PROFILE_HDF5_INTERNAL && PROFILE_HDF5_INTERNAL
+    MPI_Barrier(comm);
+    H5Vreset();
+    H5Venable();
+#endif
+
+    /* Open the output file using MPI-IO driver */
+    fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    if (fapl_id < 0) HANDLE_ERROR("H5Pcreate")
+
+    err = H5Pset_fapl_mpio(fapl_id, comm, info);
+    if (err < 0) HANDLE_ERROR("H5Pset_fapl_mpio")
+
+    /* set collective mode for metadata reads and writes */
+    err = H5Pset_all_coll_metadata_ops(fapl_id, true);
+    if (err < 0) HANDLE_ERROR("H5Pset_all_coll_metadata_ops")
+
+    err = H5Pset_coll_metadata_write(fapl_id, true);
+    if (err < 0) HANDLE_ERROR("H5Pset_coll_metadata_write")
+
+#ifdef HAVE_ACCESS
+    /* if access() is available, use it to check whether file already exists
+     * rank 0 calls access() and broadcasts file_exist */
+    if (rank == 0 && access(output_file_name.c_str(), F_OK) == -1)
+        file_exist = 0;
+
+    MPI_Bcast(&file_exist, 1, MPI_INT, 0, comm);
+    if (!file_exist) {
+        cout<<output_file_name.c_str()<<" does not exists." <<endl;
+        return -1;
+    }
+#endif
+
+    if (chunk_caching) {
+        err = set_rawdata_cache(fapl_id, 67231, raw_chunk_cache_size, 1.0);
+        if (err < 0) HANDLE_ERROR("set_rawdata_cache")
+    }
+
+    /* collectively open the output file */
+    output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR, fapl_id);
+    if (output_file_id < 0) {
+        cout<<output_file_name.c_str()<<" file open error."<<endl;
+        return -1;
+    }
+
+    err = set_metadata_cache(output_file_id, output_meta_cache_size, 0.3, 0.45);
+    if (err < 0) HANDLE_ERROR("set_metadata_cache")
+
+    /* Collectively open all the groups and datasets */
+    for (ii=0; ii<num_groups; ii++) {
+
+        group_id = H5Gopen(output_file_id, groups[ii].name.c_str(), H5P_DEFAULT);
+        if (group_id < 0) HANDLE_ERROR("H5Gopen")
+        groups[ii].id = group_id;
+
+        for (jj=0; jj<groups[ii].num_dsets; jj++) {
+            /* Open dataset jj in group ii. Keep the dataset opened, so that it
+             * can be used later when appending.
+             */
+            err = open_dataset(group_id, groups[ii].dsets[jj]);
+            if (err < 0) HANDLE_ERROR("open_dataset")
+
+        }
+
+        /* check if this group contains a key dataset */
+        if (add_partition_key) {
+            /* in append mode, the partition key dataset must already exist */
+            string key_name = part_key_base + ".seq";
+            DSInfo_t &seq = groups[ii].dsets[groups[ii].num_dsets];
+            /* copy contents of base dataset over to key dataset, seq */
+            seq = *groups[ii].key_base;
+            seq.name = part_key_base + ".seq";
+
+            if (seq.global_dims[0] > 0) {
+                /* Open key dataset */
+                seq.out_dset_id = H5Dopen(group_id, seq.name.c_str(), H5P_DEFAULT);
+                if (seq.out_dset_id < 0) HANDLE_ERROR("H5Dopen on partition key dataset")
+                err = H5Dset_extent(seq.out_dset_id, seq.global_dims);
+                if (err < 0) RETURN_ERROR("H5Dset_extent",seq.name.c_str())
+            }
+            else
+                seq.out_dset_id = -1;
+
+            seq.is_key_base = false;
+            seq.is_key_seq  = true;
+            seq.type_id     = H5T_STD_I64LE;
+            seq.type_size   = H5Tget_size(H5T_STD_I64LE);
+            groups[ii].seq_dset = &seq;
+            groups[ii].num_dsets++;
+            total_num_datasets++;
+        }
+
+        err = H5Gclose(group_id);
+        if (err < 0) HANDLE_ERROR("H5Gclose")
+    }
+    err = H5Pclose(fapl_id);
+    if (err < 0) HANDLE_ERROR("H5Pclose")
+
+    /* save the original total number of datasets */
+    original_total_num_datasets = total_num_datasets;
+
+    /* remove zero-sized datasets from each group from groups[].dsets[] */
+    for (ii=0; ii<num_groups; ii++) {
+        kk = -1;
+        for (jj=0; jj<groups[ii].num_dsets; jj++) {
+            if (groups[ii].dsets[jj].global_dims[0] == 0) {
+                groups[ii].dsets[jj].in_dset_ids.clear();
+                total_num_datasets--;
+            }
+            else if (++kk < jj) {
+                groups[ii].dsets[kk] = groups[ii].dsets[jj];
+                if (groups[ii].dsets[kk].is_key_base)
+                    groups[ii].key_base = groups[ii].dsets + kk;
+                else if (groups[ii].dsets[kk].is_key_seq)
+                    groups[ii].seq_dset = groups[ii].dsets + kk;
+            }
+        }
+        groups[ii].num_dsets = kk + 1;
+    }
+    /* remove empty groups from groups[] */
+    num_groups_have_key = 0;
+    kk = -1;
+    for (ii=0; ii<num_groups; ii++) {
+        if (groups[ii].num_dsets == 0) {
+            delete [] groups[ii].dsets;
+            continue;
+        }
+        else if (++kk < ii)
+            groups[kk] = groups[ii];
+
+        if (groups[kk].key_base != NULL)
+            num_groups_have_key++;
+    }
+    num_groups = kk + 1;
+
+#if defined DEBUG && DEBUG
+    if (add_partition_key) {
+        for (ii=0; ii<num_groups; ii++) {
+            if (groups[ii].key_base != NULL) {
+                assert(groups[ii].seq_dset->is_key_seq);
+            }
+        }
+    }
+#endif
+
+    /* Calculate the number of collective writes for each dataset based on the
+     * I/O buffer size.
+     */
+    calculate_num_writes();
+
+    /* use MPI collective I/O */
+    dxpl_id = H5Pcreate(H5P_DATASET_XFER);
+    if (dxpl_id < 0) HANDLE_ERROR("H5Pcreate")
+    err = H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
+    if (err < 0) HANDLE_ERROR("H5Pset_dxpl_mpio")
+
+#if defined PROFILE_HDF5_INTERNAL && PROFILE_HDF5_INTERNAL
+    MPI_Barrier(comm);
+    H5Vprint();
+    H5Vdisable();
+#endif
+fn_exit:
+    return err_exit;
+}
+
 /*----< collect_metadata() >-------------------------------------------------*/
 int Concatenator::collect_metadata(hid_t             obj_id,
                                    char const       *name,
@@ -587,7 +781,7 @@ int Concatenator::collect_metadata(hid_t             obj_id,
     unordered_map<string, DSInfo_t> grp;
 
     if (obj_info->type == H5O_TYPE_GROUP) {
-        /* retrieve metadata about this group */
+        /* This object is a group. Retrieve metadata about this group */
         H5G_info_t grp_info;
         err = H5Gget_info_by_name(obj_id, name, &grp_info, H5P_DEFAULT);
         if (err < 0) RETURN_ERROR("H5Gget_info_by_name", name)
@@ -607,7 +801,8 @@ int Concatenator::collect_metadata(hid_t             obj_id,
 
         if (file_no == 0) { /* set only when reading the 1st file */
             groups[grp_no].name.assign(name);
-            /* +1 is for an additional partitioning key dataset */
+            /* allocate space for dataset metadata in this group.
+             * +1 is for an additional partitioning key dataset */
             groups[grp_no].dsets = new DSInfo_t[grp_info.nlinks + 1];
             groups[grp_no].key_base = NULL;
             groups[grp_no].seq_dset = NULL;
@@ -618,15 +813,19 @@ int Concatenator::collect_metadata(hid_t             obj_id,
         groups[grp_no].num_dsets = 0; /* to be increased in later visit */
     }
     else if (obj_info->type == H5O_TYPE_DATASET) {
+        /* This object is a dataset */
         DSInfo_t &dset = groups[grp_no].dsets[groups[grp_no].num_dsets];
         groups[grp_no].num_dsets++;
 
         hid_t dset_id;
+
+        /* retrieve group name and dataset name */
         char *name_copy = strdup(name);
         char *group_name = strtok(name_copy, "/");
         char *dataset_name = strtok(NULL, "/");
 
-        /* group should have already been registered */
+        /* group should have already been registered, because groups are
+         * visited first */
         if (groups[grp_no].name.compare(group_name))  {
             printf("Expecting group name %s of dataset %s but got %s\n",
                    groups[grp_no].name.c_str(), dataset_name, group_name);
@@ -637,7 +836,7 @@ int Concatenator::collect_metadata(hid_t             obj_id,
         dset_id = H5Dopen(obj_id, name, H5P_DEFAULT);
         if (dset_id < 0) RETURN_ERROR("H5Dopen",name)
 
-        /* Get dimension sizes */
+        /* obtain dataset's dimension sizes into dset_dims[] */
         hid_t space_id = H5Dget_space(dset_id);
         if (space_id < 0) RETURN_ERROR("H5Dget_space",name)
         hsize_t dset_dims[2];
@@ -646,7 +845,7 @@ int Concatenator::collect_metadata(hid_t             obj_id,
         err = H5Sclose(space_id);
         if (err < 0) RETURN_ERROR("H5Sclose",name)
 
-        if (file_no == 0) { /* first input file */
+        if (file_no == 0) { /* This is the first input file */
             dset.name.assign(dataset_name);
             dset.local_dims[0] = dset_dims[0];
             dset.local_dims[1] = dset_dims[1];
@@ -667,11 +866,10 @@ int Concatenator::collect_metadata(hid_t             obj_id,
                 dset.type_size = H5Tget_size(dset.type_id);
                 if (dset.type_size  < 0) RETURN_ERROR("H5Tget_size",name)
             }
-            dset.layout        = (enforce_contiguous == true) ?
-                                 H5D_CONTIGUOUS :
-                                 H5D_CHUNKED;
-            dset.is_key_seq    = false;
-            dset.is_key_base   = false;
+            dset.layout = (enforce_contiguous == true) ? H5D_CONTIGUOUS
+                                                       : H5D_CHUNKED;
+            dset.is_key_seq  = false;
+            dset.is_key_base = false;
 
             if (add_partition_key) {
                 string key_name = part_key_base + ".seq";
@@ -681,7 +879,7 @@ int Concatenator::collect_metadata(hid_t             obj_id,
                            dataset_name,group_name);
                     return -1;
                 }
-                /* check if this is the partition key base */
+                /* check if this is the partition key base dataset */
                 if (part_key_base.compare(dataset_name) == 0) {
                     assert(groups[grp_no].key_base == NULL);
                     dset.is_key_base = true;
@@ -691,25 +889,29 @@ int Concatenator::collect_metadata(hid_t             obj_id,
             total_num_datasets++;
         }
         else {
-            /* accumulate across all assigned input files */
+            /* accumulate this dataset's dimension sizes across all assigned
+             * input files */
             dset.local_dims[0] += dset_dims[0];
 
             assert(dset_dims[1] == dset.local_dims[1]);
             assert(dset.name.compare(dataset_name) == 0);
         }
-        /* Note all datasets in the same group share the 1st dimension size */
+        /* Note all datasets in the same group share the size of dimension 0 */
         groups[grp_no].shared_dim0 = dset.local_dims[0];
 
+        /* a dataset may be of zero size */
         if (dset_dims[0] > 0) {
             dset.in_dset_ids.push_back(dset_id);  /* save dataset ID */
             dset.in_dim0.push_back(dset_dims[0]); /* save dataset dim0 size */
             hsize_t dset_size = dset_dims[0] * dset_dims[1] * dset.type_size;
+            /* find the max size among all datasets */
             if (max_local_size_in_bytes < dset_size)
                 max_local_size_in_bytes = dset_size;
         }
         else {
-            /* keep the vector size the same as num_input_files, in case a
-             * dataset is zero-sized in one file but non-zero sized in another
+            /* This dataset is of zero size in this input file. Keep the vector
+             * size the same as num_input_files, in case this dataset is of
+             * size zero but non-zero sized in another file.
              */
             dset.in_dset_ids.push_back(-1);
             dset.in_dim0.push_back(0);
@@ -793,7 +995,7 @@ int check_h5_objects(const char *filename, hid_t fid)
          else if (ot == H5I_DATASET)   type_name = "H5I_DATASET";
          else if (ot == H5I_ATTR)      type_name = "H5I_ATTR";
          H5Iget_name(objs[ii], obj_name, 1024);
-         printf("%s %4zd: type %s, name %s\n",
+         printf("Still opened in file %s %4zd: type %s, name %s\n",
                 filename, ii, type_name.c_str(), obj_name);
     }
     free(objs);
@@ -1057,6 +1259,51 @@ int Concatenator::create_dataset(hid_t     group_id,
         err = H5Dclose(dset.out_dset_id);
         if (err < 0) HANDLE_ERROR("H5Dclose")
     }
+fn_exit:
+#if defined PROFILE && PROFILE
+    c_1d_2d += MPI_Wtime() - start;
+#endif
+    return err_exit;
+}
+
+/*----< open_dataset() >-----------------------------------------------------*/
+int Concatenator::open_dataset(hid_t     group_id,
+                               DSInfo_t& dset)
+{
+    int err_exit=0;
+    herr_t err;
+#if defined PROFILE && PROFILE
+    double start;
+    start = MPI_Wtime();
+#endif
+
+    /* Open only non-zero sized datasets */
+    if (dset.global_dims[0] > 0) {
+        /* Open an existing dataset in the output file. */
+        dset.out_dset_id = H5Dopen(group_id, dset.name.c_str(), H5P_DEFAULT);
+        if (dset.out_dset_id < 0) HANDLE_ERROR("H5Dopen")
+
+        /* collect the current dataset size */
+        hid_t space_id = H5Dget_space(dset.out_dset_id);
+        if (space_id < 0) HANDLE_ERROR("H5Dget_space")
+        hsize_t dset_dims[2];
+        int ndims = H5Sget_simple_extent_dims(space_id, dset_dims, NULL);
+        if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims",dset.name.c_str())
+        err = H5Sclose(space_id);
+        if (err < 0) RETURN_ERROR("H5Sclose",dset.name.c_str())
+
+        /* extend the dim[0] size by dset_dims[0] */
+        if (dset_dims[0] > 0) {
+            dset.global_dims[0] += dset_dims[0];
+            err = H5Dset_extent(dset.out_dset_id, dset.global_dims);
+            if (err < 0) RETURN_ERROR("H5Dset_extent",dset.name.c_str())
+
+            /* update the starting offset of the appending */
+            dset.global_off += dset_dims[0];
+        }
+    }
+    else
+        dset.out_dset_id = -1;
 fn_exit:
 #if defined PROFILE && PROFILE
     c_1d_2d += MPI_Wtime() - start;

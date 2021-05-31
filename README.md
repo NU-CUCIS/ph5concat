@@ -78,10 +78,11 @@ parallel data concatenation is important.
 ## Command to Run
 * Command-line options are:
   ```
-  mpiexec -n <np> ./ph5_concat [-h|-q|-d|-r|-s|-p] [-t num] [-m size] [-k base_name] [-z level] [-b size] [-o outfile] [-i infile]
+  mpiexec -n <np> ./ph5_concat [-h|-q|-a|-d|-r|-s|-p] [-t num] [-m size] [-k base_name] [-z level] [-b size] [-o outfile] [-i infile]
 
   [-h]           print this command usage message
   [-q]           enable quiet mode (default: disable)
+  [-a]           append concatenated data to an existing HDF5 file (default: no)
   [-d]           disable in-memory I/O (default: enable)
   [-r]           disable chunk caching for raw data (default: enable)
   [-s]           one process creates followed by all processes open file (default: off)
@@ -128,6 +129,11 @@ parallel data concatenation is important.
     datasets only from the disjointly assigned file (i.e. no shared-file reads)
     and then all processes collectively write each of the datasets to the output
     file. In this strategy, reads are independent but writes are collective.
+  + When using '-a' append mode, the output file must exist. The input files
+    will be concatenated into the output file.
+  + When using both options '-a' and '-k', the partitioning key datasets must
+    have been created previously in the output file and their names must be the
+    same as the name used in '-k' option.
 
 ## Sample input and output files
 * There are four sample input files provided in folder `examples`.

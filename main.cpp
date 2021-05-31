@@ -35,7 +35,7 @@
 */
 int get_memory_usage_kb(long* vmrss_kb, long* vmsize_kb)
 {
-    /* Get the the current process' status file from the proc filesystem */
+    /* Get the current process' status file from the proc filesystem */
     FILE* procfile = fopen("/proc/self/status", "r");
 
     long to_read = 8192;
@@ -100,6 +100,7 @@ public:
     Options(int argc, char **argv);
     bool quiet;
     bool err_exit;
+    bool append_mode;
     bool one_process_create;
     bool posix_open;
     bool in_memory_io;
@@ -123,6 +124,7 @@ usage(char *progname)
   Concatenate multiple HDF5 files into an output file.\n\n\
   [-h]         print this command usage message\n\
   [-q]         enable quiet mode (default: disable)\n\
+  [-a]         append concatenated data to an existing HDF5 file (default: no)\n\
   [-d]         disable in-memory I/O (default: enable)\n\
   [-r]         disable chunk caching for raw data (default: enable)\n\
   [-s]         one process creates followed by all processes open file (default: off)\n\
@@ -138,13 +140,14 @@ usage(char *progname)
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     cout<<"Usage: "<<progname<<
-    " [-h|-q|-d|-r|-s|-p] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]\n"
+    " [-h|-q|-a|-d|-r|-s|-p] [-t num] [-m size] [-k name] [-z level] [-b size] [-o outfile] [-i infile]\n"
     << USAGE << endl;
 }
 
 Options::Options(int argc, char **argv) :
                  quiet(false),
                  err_exit(false),
+                 append_mode(false),
                  one_process_create(false),
                  posix_open(true),
                  in_memory_io(true),
@@ -162,8 +165,11 @@ Options::Options(int argc, char **argv) :
     string line;
     ifstream fd;
 
-    while ((opt = getopt(argc, argv, "hqspdrct:m:k:i:o:z:b:")) != -1) {
+    while ((opt = getopt(argc, argv, "hqaspdrct:m:k:i:o:z:b:")) != -1) {
         switch (opt) {
+            case 'a':
+                append_mode = true;
+                break;
             case 's':
                 one_process_create = true;
                 break;
@@ -321,6 +327,7 @@ int main(int argc, char **argv)
     Concatenator concat(nprocs, rank, MPI_COMM_WORLD, MPI_INFO_NULL,
                         myinputs.size(),  // number of assigned input files
                         opt.output_file,  // output file name
+                        opt.append_mode,
                         opt.posix_open,
                         opt.in_memory_io,
                         opt.chunk_caching,
@@ -333,7 +340,7 @@ int main(int argc, char **argv)
                         opt.part_key_base);
 
     if (opt.zip_level > 0) {
-        /* Check if gzip fileter is available */
+        /* Check if gzip filter is available */
         unsigned int filter_info;
         htri_t avail = H5Zfilter_avail(H5Z_FILTER_DEFLATE);
         if (avail < 0) {
@@ -352,12 +359,16 @@ int main(int argc, char **argv)
 
     GET_MEM(step_vmrss[0], step_vmsize[0])
     
-    /* Collect all metadata from input files */
 #if defined HAS_H5GET_ALLOC_STATS && HAS_H5GET_ALLOC_STATS
     size_t cur_bytes, md_malloc;
     H5get_alloc_stats(NULL, &cur_bytes, NULL, NULL, NULL, NULL, NULL);
 #endif
     SET_TIMER(ts)
+    /* Each process reads assigned input files to collect all group and dataset
+     * metadata and stores them in the object concat. The input datasets are
+     * kept opened for later use. The dataset IDs are stored in
+     * dset.in_dset_ids.
+     */
     err = concat.construct_metadata(myinputs);
     if(err != 0){
         cout<<"construct_metadata() failed."<<endl;
@@ -371,9 +382,19 @@ int main(int argc, char **argv)
     md_malloc -= cur_bytes;
 #endif
 
-    /* Create a new file and define all groups and datasets */
     SET_TIMER(ts)
-    err = concat.file_create();
+    if (opt.append_mode)
+        /* Open the existing file and retrieve the dimension sizes of all
+         * datasets. The datasets opened from the output file their IDs are
+         * stored in dset.out_dset_id.
+         */
+        err = concat.file_open();
+    else
+        /* Create a new file and define all groups and datasets. The datasets
+         * created from the new output file their IDs are stored in
+         * dset.out_dset_id.
+         */
+        err = concat.file_create();
     if (err < 0) {
         cout<<"file_create() failed."<<endl;
         goto prog_exit;
@@ -445,7 +466,7 @@ int main(int argc, char **argv)
                 goto prog_exit;
             }
             GET_TIMER(ts, step_time[3])
-            PRN_TIMER(step_time[3], "Writ partition key datasets")
+            PRN_TIMER(step_time[3], "Write partition key datasets")
 	    GET_MEM(step_vmrss[4], step_vmsize[4])
         }
 
@@ -574,10 +595,15 @@ int main(int argc, char **argv)
         printf("Input directory name:                    %s\n",opt.input_dirname.c_str());
         printf("Number of input HDF5 files:              %zd\n",opt.input_files.size());
         printf("Output HDF5 file name:                   %s\n",opt.output_file.c_str());
+        if (opt.append_mode)
+            printf("Append to existing HDF5 file\n");
+        else
+            printf("The output HDF5 file is newly created\n");
         printf("Parallel I/O strategy:                   %d\n", opt.io_strategy);
         printf("Use POSIX I/O to open file:              %s\n",opt.posix_open?"ON":"OFF");
         printf("POSIX In-memory I/O:                     %s\n",opt.in_memory_io?"ON":"OFF");
-	printf("1-process-create-followed-by-all-open:   %s\n",opt.one_process_create?"ON":"OFF");
+        if (! opt.append_mode)
+	    printf("1-process-create-followed-by-all-open:   %s\n",opt.one_process_create?"ON":"OFF");
         printf("Chunk caching for raw data:              %s\n",opt.chunk_caching?"ON":"OFF");
         printf("GZIP level:                              %d\n",opt.zip_level);
         if (opt.compress_threshold > 0)
@@ -599,7 +625,10 @@ int main(int argc, char **argv)
         printf("Number calls to MPI_Allreduce:       %8d\n", concat.num_allreduce);
         printf("Number calls to MPI_Exscan:          %8d\n", concat.num_exscan);
         printf("-------------------------------------------------------------\n");
-        printf("H5Dcreate:                           %9.4f\n", concat.c_1d_2d);
+        if (opt.append_mode)
+            printf("H5Dopen:                             %9.4f\n", concat.c_1d_2d);
+        else
+            printf("H5Dcreate:                           %9.4f\n", concat.c_1d_2d);
         if (opt.io_strategy == 1) {
             printf("H5Dopen   for 1D datasets:           %9.4f\n", concat.o_1d);
             printf("H5Fopen   for 2D datasets:           %9.4f\n", concat.o_f);
@@ -613,7 +642,10 @@ int main(int argc, char **argv)
         printf("H5Dclose  for output datasets:       %9.4f\n", concat.close_out_dsets);
         printf("-------------------------------------------------------------\n");
         printf("Read metadata from input files:      %9.4f\n", step_time[0]);
-        printf("Create output file + datasets:       %9.4f\n", step_time[1]);
+        if (opt.append_mode)
+            printf("Open output file + datasets:         %9.4f\n", step_time[1]);
+        else
+            printf("Create output file + datasets:       %9.4f\n", step_time[1]);
         printf("Concatenate small datasets:          %9.4f\n", step_time[2]);
         if (opt.part_key_base.compare("") != 0)
             printf("Write to partition key datasets:     %9.4f\n", step_time[3]);

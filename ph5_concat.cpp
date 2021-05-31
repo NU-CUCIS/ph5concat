@@ -612,6 +612,19 @@ int Concatenator::file_open()
     H5Venable();
 #endif
 
+#ifdef HAVE_ACCESS
+    /* if access() is available, use it to check whether file already exists
+     * rank 0 calls access() and broadcasts file_exist */
+    if (rank == 0 && access(output_file_name.c_str(), F_OK) == -1)
+        file_exist = 0;
+
+    MPI_Bcast(&file_exist, 1, MPI_INT, 0, comm);
+    if (!file_exist) {
+        cout<<output_file_name.c_str()<<" does not exists." <<endl;
+        return -1;
+    }
+#endif
+
     /* Open the output file using MPI-IO driver */
     fapl_id = H5Pcreate(H5P_FILE_ACCESS);
     if (fapl_id < 0) HANDLE_ERROR("H5Pcreate")
@@ -625,19 +638,6 @@ int Concatenator::file_open()
 
     err = H5Pset_coll_metadata_write(fapl_id, true);
     if (err < 0) HANDLE_ERROR("H5Pset_coll_metadata_write")
-
-#ifdef HAVE_ACCESS
-    /* if access() is available, use it to check whether file already exists
-     * rank 0 calls access() and broadcasts file_exist */
-    if (rank == 0 && access(output_file_name.c_str(), F_OK) == -1)
-        file_exist = 0;
-
-    MPI_Bcast(&file_exist, 1, MPI_INT, 0, comm);
-    if (!file_exist) {
-        cout<<output_file_name.c_str()<<" does not exists." <<endl;
-        return -1;
-    }
-#endif
 
     if (chunk_caching) {
         err = set_rawdata_cache(fapl_id, 67231, raw_chunk_cache_size, 1.0);
@@ -667,7 +667,6 @@ int Concatenator::file_open()
              */
             err = open_dataset(group_id, groups[ii].dsets[jj]);
             if (err < 0) HANDLE_ERROR("open_dataset")
-
         }
 
         /* check if this group contains a key dataset */
@@ -675,7 +674,7 @@ int Concatenator::file_open()
             /* in append mode, the partition key dataset must already exist */
             string key_name = part_key_base + ".seq";
             DSInfo_t &seq = groups[ii].dsets[groups[ii].num_dsets];
-            /* copy contents of base dataset over to key dataset, seq */
+            /* copy contents of key base dataset over to key dataset seq */
             seq = *groups[ii].key_base;
             seq.name = part_key_base + ".seq";
 

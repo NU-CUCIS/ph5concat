@@ -400,7 +400,7 @@ int main(int argc, char **argv)
         goto prog_exit;
     }
     GET_TIMER(ts, step_time[1])
-    PRN_TIMER(step_time[1], "Create output file + datasets")
+    PRN_TIMER(step_time[1], "Create/Open output file + datasets")
     GET_MEM(step_vmrss[2], step_vmsize[2])
       
     if (opt.io_strategy == 1) {

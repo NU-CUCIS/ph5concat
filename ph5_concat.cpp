@@ -259,7 +259,7 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
     /* check if partitioning key base dataset in each group is found */
     if (add_partition_key) {
         for (size_t ii=0; ii<num_groups; ii++) {
-            if (groups[ii].key_base == NULL) {
+            if (groups[ii].key_base == NULL && rank == 0) {
                 printf("[%d] Warning: partition key base '%s' cannot be found in group '%s'\n",
                        rank, part_key_base.c_str(), groups[ii].name.c_str());
             }
@@ -671,7 +671,7 @@ int Concatenator::file_open()
         }
 
         /* check if this group contains a key dataset */
-        if (add_partition_key) {
+        if (add_partition_key && groups[ii].key_base != NULL) {
             /* in append mode, the partition key dataset must already exist */
             string key_name = part_key_base + ".seq";
             DSInfo_t &seq = groups[ii].dsets[groups[ii].num_dsets];

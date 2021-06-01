@@ -1109,7 +1109,7 @@ void Concatenator::calculate_chunk_size(DSInfo_t &dset)
     chunk_len = chunk_size_threshold / dset.type_size;
 #endif
 
-#if 0
+#if USE_MIN_DSET_SIZE
     /* set chunk size to global dim size if smaller than the threshold */
     if (dset.global_dims[1] == 1) /* 1D dataset */
         /* use whichever is smaller */

@@ -451,6 +451,7 @@ fn_exit:
      */
 }
 
+#ifdef INCR_RAW_DATA_CHUNK_CACHE_SIZE
 /*----< incr_raw_data_chunk_cache() >----------------------------------------*/
 static
 int incr_raw_data_chunk_cache(hid_t fapl_id)
@@ -489,6 +490,7 @@ int incr_raw_data_chunk_cache(hid_t fapl_id)
 fn_exit:
     return err_exit;
 }
+#endif
 
 /*----< check_h5_objects() >-------------------------------------------------*/
 static
@@ -700,10 +702,12 @@ int main(int argc, char **argv)
     err = H5Pset_meta_block_size(fapl_id, 1048576);
     if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size", outfile)
 
-/* This setting degrades the performance.
+#ifdef INCR_RAW_DATA_CHUNK_CACHE_SIZE
+    /* This setting actually degrades the performance !!! */
     err = incr_raw_data_chunk_cache(fapl_id);
     if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache", outfile)
-*/
+
+#endif
     it_op.raw_chunk_cache = raw_chunk_cache;
 
     /* create output file */

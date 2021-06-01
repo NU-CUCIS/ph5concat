@@ -82,7 +82,7 @@ struct op_data {
     }
     int index(std::string name) const
     {
-      for(auto idx = 0; idx < names.size(); idx++) 
+      for(size_t idx = 0; idx < names.size(); idx++) 
         if(strcmp(name.c_str(), names[idx].c_str()) == 0) return idx;
       return -1;
     }
@@ -335,7 +335,6 @@ int main(int argc, char **argv)
             file_list[it_op.event_index] = in_list[i];
         }
         else {
-            unsigned int run, subrun;
             hsize_t one[2]={1,1}, offs[2]={0,0}, lens[2]={1,1};
             hid_t dset_id, mem_space_id, file_space_id;
 
@@ -376,7 +375,10 @@ int main(int argc, char **argv)
 
             /* check if key(run, subrun) has already existed */
             if (file_list.find(it_op.event_index) != file_list.end()) {
-                cerr << "Error: key tuple (run=" << run << ", subrun=" << subrun << ") already exists\n\n";
+                cerr << "Error: key tuple (";
+	        for (size_t eidx = 0; eidx < it_op.names.size(); eidx++)
+                    cerr << it_op.event_index[eidx] << " " ;
+                cerr << ") already exists\n\n";;
                 err_exit = -1;
                 goto fn_exit;
             }

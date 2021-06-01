@@ -220,10 +220,10 @@ usage(char *progname)
 
 int main(int argc, char **argv)
 {
-    char msg[1024], *infile=NULL, *grp_name;
+    char msg[1024], *infile=NULL;
     hid_t file_id=-1, fapl_id=-1;
     char * source=NULL;
-    int c, err_exit;
+    int c, err_exit=0;
     herr_t err;
     hsize_t one[2]={1,1}, offs[2]={0,0}, lens[2]={1,1};
     hid_t dset_id, mem_space_id, file_space_id;
@@ -341,14 +341,14 @@ int main(int argc, char **argv)
     err = H5Dclose(run_id);
     if (err < 0) RETURN_ERROR("H5Dclose", "run");
 
-    if (verbose) printf("/spill/run dims (%d, 1)\n", dset_dims[0]);
+    if (verbose) printf("/spill/run dims (%llu, 1)\n", dset_dims[0]);
     
     if (!dry_run) {
 	char * newsrc_name = basename(source);
 
 	/* allocate out buffer */
 	outbuf = (int*) malloc(dset_dims[0] * sizeof(int));
-	if (verbose) printf("Filling /spill/%s (%d, 1) with %d\n", newsrc_name, dset_dims[0], *inbuf);
+	if (verbose) printf("Filling /spill/%s (%llu, 1) with %d\n", newsrc_name, dset_dims[0], *inbuf);
 
 	/* fill out buffer with value determined from source */
 	for(auto ib = 0u; ib < dset_dims[0]; ib++) outbuf[ib] = inbuf[0];
@@ -389,6 +389,6 @@ int main(int argc, char **argv)
         err = H5Pclose(fapl_id);
         if (err < 0) printf("Error at line %d: H5Pclose\n",__LINE__);
     }
-
+    return (err_exit == -1);
 }
 

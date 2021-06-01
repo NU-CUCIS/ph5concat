@@ -39,9 +39,11 @@ parallel data concatenation is important.
   size of the 2nd dimension.
 
 ## Output HDF5 File
-* A single HDF5 output file will be created.
-* The output file shares the same schema as the input files, i.e. the same
-  numbers and names of groups datasets.
+* A single HDF5 output file will be created (the default create mode), unless
+  the '-a' append mode is enabled. In append mode case, the output file must be
+  a file that has been previously concatenated.
+* For create mode, the output file shares the same schema as the input files,
+  i.e. the same numbers and names of groups and datasets.
 * The size of 1st dimension (most significant) of individual datasets are sum
   of the 1st dimension of the same dataset from all input files.
 * HDF5 compression and data chunking settings can be customized by command-line
@@ -133,7 +135,7 @@ parallel data concatenation is important.
     will be concatenated into the output file.
   + When using both options '-a' and '-k', the partitioning key datasets must
     have been created previously in the output file and their names must be the
-    same as the name used in '-k' option.
+    same as the one used in '-k' option.
 
 ## Sample input and output files
 * There are four sample input files provided in folder `examples`.

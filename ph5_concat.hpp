@@ -31,13 +31,13 @@ using namespace std;
 }
 
 #define HANDLE_ERROR(fname) { \
-    cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"]["<<__LINE__<<"] "<<fname<<" failed."<<endl; \
+    cout<<"Error in "<<__FILE__<<" line "<<__LINE__<<": "<<__FUNCTION__<<"() calling "<<fname<<" failed."<<endl; \
     err_exit = -1; \
     goto fn_exit; \
 }
 
 #define HANDLE_DSET_ERROR(fname, dname) { \
-    cout<<"["<<__FILE__<<"]["<<__FUNCTION__<<"()][line:"<<__LINE__<<"] "<<fname<<" for dataset \""<<dname<<"\" failed."<<endl; \
+    cout<<"Error in "<<__FILE__<<" line "<<__LINE__<<": "<<__FUNCTION__<<"() calling "<<fname<<" for dataset \""<<dname<<"\" failed."<<endl; \
     err_exit = -1; \
     goto fn_exit; \
 }

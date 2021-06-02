@@ -391,10 +391,8 @@ int Concatenator::file_create()
             /* create a new file */
             output_file_id = H5Fcreate(output_file_name.c_str(), H5F_ACC_EXCL,
                                        H5P_DEFAULT, H5P_DEFAULT);
-            if (output_file_id < 0) {
-                cout<<output_file_name.c_str()<<" already exists." <<endl;
-                return -1;
-            }
+            if (output_file_id < 0)
+                HANDLE_ERROR(string("H5Fcreate in exclusive mode ") + output_file_name.c_str())
 
             /* rank 0 creates all the groups and datasets */
             for (ii=0; ii<num_groups; ii++) {
@@ -486,10 +484,8 @@ int Concatenator::file_create()
         /* collectively create a new output file */
         output_file_id = H5Fcreate(output_file_name.c_str(), H5F_ACC_EXCL,
                                    H5P_DEFAULT, fapl_id);
-        if (output_file_id < 0) {
-            cout<<output_file_name.c_str()<<" already exists."<<endl;
-            return -1;
-        }
+        if (output_file_id < 0)
+            HANDLE_ERROR(string("H5Fcreate in exclusive mode ") + output_file_name.c_str())
 
         err = set_metadata_cache(output_file_id, output_meta_cache_size,
                                  0.3, 0.45);

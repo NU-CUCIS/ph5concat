@@ -222,17 +222,17 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
     for (auto it = inputs.begin(); it != inputs.end(); it++) {
         /* open the assigned file in read-only mode */
         file_id = H5Fopen(it->c_str(), H5F_ACC_RDONLY, fapl_id);
-        if (file_id < 0) HANDLE_ERROR(string("H5Fopen ") + it->c_str())
+        if (file_id < 0) HANDLE_ERROR(string("H5Fopen ") + *it)
 
         /* iterate all data objects (groups and datasets in each group) to
          * collect their metadata
          */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
         err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this, H5O_INFO_ALL);
-        if (err < 0) HANDLE_ERROR("H5Ovisit3")
+        if (err < 0) HANDLE_ERROR(string("H5Ovisit3") + *it)
 #else
         err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, op_func, this);
-        if (err < 0) HANDLE_ERROR("H5Ovisit")
+        if (err < 0) HANDLE_ERROR(string("H5Ovisit") + *it)
 #endif
 
         /* if partition key dataset is to be added and group /spill cannot be
@@ -435,7 +435,7 @@ int Concatenator::file_create()
         output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR,
                                  fapl_id);
         if (output_file_id < 0)
-            HANDLE_ERROR(string("H5Fopen ") + output_file_name.c_str())
+            HANDLE_ERROR(string("H5Fopen ") + output_file_name)
 
         err = set_metadata_cache(output_file_id, output_meta_cache_size,
                                  0.3, 0.45);
@@ -455,7 +455,7 @@ int Concatenator::file_create()
                     hid_t id;
                     id = H5Dopen(group_id, groups[ii].dsets[jj].name.c_str(),
                                  H5P_DEFAULT);
-                    if (id < 0) HANDLE_ERROR("H5Dopen")
+                    if (id < 0) HANDLE_ERROR(string("H5Dopen ")+groups[ii].dsets[jj].name)
                     groups[ii].dsets[jj].out_dset_id = id;
                     calculate_chunk_size(groups[ii].dsets[jj]);
                 }
@@ -680,7 +680,7 @@ int Concatenator::file_open()
     /* collectively open the output file */
     output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR, fapl_id);
     if (output_file_id < 0)
-        HANDLE_ERROR(string("H5Fopen ") + output_file_name.c_str())
+        HANDLE_ERROR(string("H5Fopen ") + output_file_name)
 
     err = set_metadata_cache(output_file_id, output_meta_cache_size, 0.3, 0.45);
     if (err < 0) HANDLE_ERROR("set_metadata_cache")
@@ -716,7 +716,8 @@ int Concatenator::file_open()
              * have already existed
              */
 	    seq.out_dset_id = H5Dopen(group_id, seq.name.c_str(), H5P_DEFAULT);
-            if (seq.out_dset_id < 0) HANDLE_ERROR("H5Dopen on partition key dataset")
+            if (seq.out_dset_id < 0)
+                HANDLE_ERROR(string("H5Dopen on partition key dataset ")+seq.name)
             /* seq.global_dims has been increased in key_base.global_dims */
             err = H5Dset_extent(seq.out_dset_id, seq.global_dims);
             if (err < 0) RETURN_ERROR("H5Dset_extent",seq.name.c_str())
@@ -1223,7 +1224,7 @@ int Concatenator::create_dataset(hid_t     group_id,
     /* Create a dataset in the output file. */
     dset.out_dset_id = H5Dcreate2(group_id, dset.name.c_str(), dset.type_id,
                                   space_id, H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-    if (dset.out_dset_id < 0) HANDLE_ERROR("H5Dcreate2")
+    if (dset.out_dset_id < 0) HANDLE_ERROR(string("H5Dcreate2 ")+dset.name)
 
     if (dcpl_id != H5P_DEFAULT) {
         err = H5Pclose(dcpl_id);
@@ -1269,7 +1270,7 @@ int Concatenator::open_dataset(hid_t     group_id,
 
     /* Open an existing dataset in the output file. */
     dset.out_dset_id = H5Dopen(group_id, dset.name.c_str(), H5P_DEFAULT);
-    if (dset.out_dset_id < 0) HANDLE_ERROR("H5Dopen")
+    if (dset.out_dset_id < 0) HANDLE_ERROR(string("H5Dopen ")+dset.name)
 
     /* collect the current dataset size */
     space_id = H5Dget_space(dset.out_dset_id);

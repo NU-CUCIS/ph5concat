@@ -14,6 +14,13 @@ using namespace std;
 #include <hdf5.h>
 #include <mpi.h>
 
+#ifndef MAX
+#define MAX(x,y) (((x) > (y)) ? (x) : (y))
+#endif
+#ifndef MIN
+#define MIN(x,y) (((x) < (y)) ? (x) : (y))
+#endif
+
 #define MAX_STR_LEN 64
 #define PROFILE_HDF5_INTERNAL 0
 #define MIN_DATASET_SIZE     128*1024*1024

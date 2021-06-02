@@ -222,7 +222,7 @@ int Concatenator::construct_metadata(vector<string> const &inputs)
     for (auto it = inputs.begin(); it != inputs.end(); it++) {
         /* open the assigned file in read-only mode */
         file_id = H5Fopen(it->c_str(), H5F_ACC_RDONLY, fapl_id);
-        if (file_id < 0) HANDLE_ERROR("H5Fopen")
+        if (file_id < 0) HANDLE_ERROR(string("H5Fopen ") + it->c_str())
 
         /* iterate all data objects (groups and datasets in each group) to
          * collect their metadata
@@ -436,10 +436,8 @@ int Concatenator::file_create()
         /* all ranks collectively open the newly created file */
         output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR,
                                  fapl_id);
-        if (output_file_id < 0) {
-            cout<<output_file_name.c_str()<<" failed to open file." <<endl;
-            return -1;
-        }
+        if (output_file_id < 0)
+            HANDLE_ERROR(string("H5Fopen ") + output_file_name.c_str())
 
         err = set_metadata_cache(output_file_id, output_meta_cache_size,
                                  0.3, 0.45);
@@ -685,10 +683,8 @@ int Concatenator::file_open()
 
     /* collectively open the output file */
     output_file_id = H5Fopen(output_file_name.c_str(), H5F_ACC_RDWR, fapl_id);
-    if (output_file_id < 0) {
-        cout<<output_file_name.c_str()<<" file open error."<<endl;
-        return -1;
-    }
+    if (output_file_id < 0)
+        HANDLE_ERROR(string("H5Fopen ") + output_file_name.c_str())
 
     err = set_metadata_cache(output_file_id, output_meta_cache_size, 0.3, 0.45);
     if (err < 0) HANDLE_ERROR("set_metadata_cache")

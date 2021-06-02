@@ -360,7 +360,7 @@ int main(int argc, char **argv)
      * dset.in_dset_ids.
      */
     err = concat.construct_metadata(myinputs);
-    if(err != 0){
+    if (err != 0){
         cout<<"construct_metadata() failed."<<endl;
         goto prog_exit;
     }
@@ -498,13 +498,13 @@ int main(int argc, char **argv)
     /* aggregate all memory snapshots */
     MPI_Reduce(step_vmrss, total_vmrss, 8, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     total_vmrss[8] = 0;
-    for (int i=0; i<8; i++) total_vmrss[8] = std::max(total_vmrss[8], total_vmrss[i]);
+    for (int i=0; i<8; i++) total_vmrss[8] = MAX(total_vmrss[8], total_vmrss[i]);
     for (int i=0; i<8; i++) avg_vmrss[i] = total_vmrss[i] / nprocs / 1024;
     total_vmrss[8] /= 1024;
 
     MPI_Reduce(step_vmsize, total_vmsize, 8, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     total_vmsize[8] = 0;
-    for (int i=0; i<8; i++) total_vmsize[8] = std::max(total_vmsize[8], total_vmsize[i]);
+    for (int i=0; i<8; i++) total_vmsize[8] = MAX(total_vmsize[8], total_vmsize[i]);
     for (int i=0; i<8; i++) avg_vmsize[i] = total_vmsize[i] / nprocs / 1024;
     total_vmsize[8] /= 1024;
 
@@ -686,6 +686,7 @@ int main(int argc, char **argv)
 #endif
 
 prog_exit:
+    if (err != 0) MPI_Abort(MPI_COMM_WORLD, -1);
     MPI_Finalize();
     return (err != 0);
 }

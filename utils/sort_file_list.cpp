@@ -207,9 +207,9 @@ usage(char *progname)
                 multiple values allowed\n\
   [-o outfile]  output file name (default: 'out_list.txt')\n\
   infile        input file name contains a list of HDF5 file names (required)\n\n\
-  This utility program re-order the files in infile into a sorted list based\n\
-  on the increasing order of 'run' and 'subrun' IDs. Additional IDs can be used to sort with\n\
-  argument -a. Eg, -a /rec.hdr/cycle.\n\
+  This utility program re-order the file names in infile into a sorted list\n\
+  based on the increasing order of 'run' and 'subrun' IDs. Additional IDs can\n\
+  be used to sort with argument -a. Eg, -a /rec.hdr/cycle.\n\
   Requirements for the input HDF5 files:\n\
     1. must contain datasets '/spill/run' and '/spill/subrun'\n\
     2. may contain multiple groups at root level\n\

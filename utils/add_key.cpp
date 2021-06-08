@@ -15,6 +15,7 @@
 #include <assert.h> /* assert() */
 #include <regex.h>
 
+#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -59,42 +60,34 @@ double wtime(void)
 #endif
 
 #define RETURN_ERROR(func_name, obj_name) { \
-    printf("Error in %s line %d: calling %s for object %s\n",__FILE__,__LINE__,func_name,obj_name); \
+    cerr<<"Error at line "<<__LINE__<<": calling "<<func_name<<" for object "<<obj_name<<endl; \
     return -1; \
 }
 
 #define HANDLE_ERROR(msg) { \
-    printf("Error at line %d: %s\n",__LINE__, msg); \
+    cerr<<"Error at line "<<__LINE__<<": "<<msg<<endl; \
     err_exit = -1; \
     goto fn_exit; \
 }
 
 #define CALLBACK_ERROR(func_name, dset_name) { \
-    printf("Error in %s line %d: calling %s for group %s dataset %s\n",__FILE__,__LINE__,func_name, grp_name, dset_name); \
+    cerr<<"Error at line "<<__LINE__<<": calling "<<func_name<<" for group "<<grp_name<<" dataset "<<dset_name<<endl; \
     return -1; \
 }
 
-/* lookup table based on 3-tuple datasets */
-typedef vector<unsigned int> keyv;
+/* lookup table based on n-tuple datasets */
+typedef vector<long long> keyv;
 
 struct hashv : public unary_function<keyv, size_t> {
     size_t operator()(const keyv& key) const {
-	size_t h = 0;
-	for(size_t ikey = 0; ikey < key.size(); ikey++)
-	    h ^= key[ikey];
-	return h;
+        size_t h = 0;
+        for(size_t ikey = 0; ikey < key.size(); ikey++)
+            h ^= key[ikey];
+        return h;
     }
 };
 
-typedef tuple<unsigned int, unsigned int, unsigned int> key;
-struct hash3 : public unary_function<key, size_t> {
-    size_t operator()(const key& k) const {
-        return get<0>(k) ^ get<1>(k) ^ get<2>(k);
-    }
-};
 typedef unordered_map<keyv, int64_t, hashv> table;
-
-const vector<string> DEFAULT_INDEX_LEVELS = {"/spill/run", "/spill/subrun"};
 
 /* string-based basename */
 string basename(string full_path)
@@ -106,20 +99,19 @@ string basename(string full_path)
       return full_path;
 }
 
-
 static
-table build_lookup_table(hsize_t       len,
-			 hsize_t       nlevels,
-			 unsigned int *buf)
+table build_lookup_table(hsize_t    nelems,
+                         hsize_t    ndsets,
+                         long long *buf)
 {
-    hsize_t i;
+    hsize_t ii, jj;
     table ret;
-    
-    for (i=0; i<len; i++) {
-	keyv key(nlevels);
-	for(size_t ilvl = 0; ilvl < nlevels; ilvl++)
-	    key[ilvl] = buf[len*ilvl + i];
-	ret[key] = i;
+
+    for (ii=0; ii<nelems; ii++) {
+        keyv key(ndsets);
+        for (jj=0; jj<ndsets; jj++)
+            key[jj] = buf[nelems*jj + ii];
+        ret[key] = ii;
     }
 
     return ret;
@@ -131,11 +123,11 @@ struct op_data {
     char   **grp_names;     /* [num_groups] group names */
     herr_t   err;
     regex_t * regex;
-    
+
     bool ignore(const char * group)
     {
-	if(regex == NULL) return false;
-	return regexec(regex, group, 0, NULL, 0) == 0;
+        if(regex == NULL) return false;
+        return regexec(regex, group, 0, NULL, 0) == 0;
     }
 };
 
@@ -157,7 +149,8 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
     bool ignore = it_op->ignore(name);
 
     /* info->type == H5O_TYPE_GROUP */
-    if (verbose) printf(ignore? "group name=%s (Ignoring)\n" : "group name=%s\n",name);
+    if (verbose)
+        printf(ignore? "group name=%s (Ignoring)\n" : "group name=%s\n",name);
 
     /* skip root group '.' the first object */
     if (!strcmp(name, ".") || ignore)  return 0;
@@ -168,11 +161,10 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
 
 /*----< add_seq() >---------------------------------------------------------*/
 static
-herr_t add_seq(bool        dry_run,
-               hid_t       file_id,
-	       vector<string> index_levels,
+herr_t add_seq(hid_t       fid,
+               vector<string> index_levels,
                const char *grp_name,
-               const char *base_name,
+               const char *part_key_base,
                table       lookup_table,
                size_t     *num_nonzero_groups,
                size_t     *max_len,    /* max seq size */
@@ -180,13 +172,17 @@ herr_t add_seq(bool        dry_run,
                size_t     *avg_len,    /* avg seq size */
                double     *timing)
 {
+    const char *dset_name;
+    char key_name[1024];
     int ndims;
-    size_t i;
+    size_t ii, jj, ndsets;
+    long long *buf=NULL, *buf_ptr;
+    int64_t *seq_buf=NULL;
     herr_t err;
-    hid_t grp_id, level_id, base_id, dcpl_id, space_id, seq_id;
+    hid_t grp_id=-1, dset, dcpl_id=-1, space_id=-1, seq_id;
     hsize_t dset_dims[2], maxdims[2];
-    unsigned int *buf;
-    int64_t *seq_buf;
+    htri_t src_exist;
+    string dset_basename;
 
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
@@ -195,27 +191,43 @@ herr_t add_seq(bool        dry_run,
     SET_TIMER(ts)
 
     /* open group */
-    grp_id = H5Gopen(file_id, grp_name, H5P_DEFAULT);
-    if (grp_id < 0) CALLBACK_ERROR("H5Gopen", grp_name)
+    grp_id = H5Gopen(fid, grp_name, H5P_DEFAULT);
+    if (grp_id < 0) RETURN_ERROR("H5Gopen", grp_name)
 
-    /* open base dataset in this group */
-    base_id = H5Dopen(grp_id, base_name, H5P_DEFAULT);
-    if (base_id < 0) CALLBACK_ERROR("H5Dopen", base_name)
+    /* first index dataset */
+    dset_name = index_levels[0].c_str();
 
-    /* Get dimension sizes of base dataset */
-    space_id = H5Dget_space(base_id);
-    if (space_id < 0) CALLBACK_ERROR("H5Dget_space", base_name)
+    /* check if dataset exists */
+    src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
+    if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
+    if (src_exist == 0) {
+        if (verbose)
+            printf("Warn: dataset '%s/%s' not exist, skip this group.\n",
+                   grp_name,dset_name);
+        goto fn_exit;
+    }
+
+    /* open the first index dataset in this group */
+    dset = H5Dopen(grp_id, dset_name, H5P_DEFAULT);
+    if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
+
+    /* Note size of dimension 0 of all datasets in a group should be the same */
+    space_id = H5Dget_space(dset);
+    if (space_id < 0) CALLBACK_ERROR("H5Dget_space", dset_name)
     ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
-    if (ndims != 2) CALLBACK_ERROR("H5Sget_simple_extent_dims", base_name)
+    if (ndims != 2) CALLBACK_ERROR("H5Sget_simple_extent_dims", dset_name)
 
-    /* Get create property of base dataset when it was created */
-    dcpl_id = H5Dget_create_plist(base_id);
-    if (dcpl_id < 0) CALLBACK_ERROR("H5Dget_create_plist", base_name)
+    /* retrieve create property when the index dataset was created. The new
+     * partition key dataset will inherit the properties, such as dimensions,
+     * chunking, etc.
+     */
+    dcpl_id = H5Dget_create_plist(dset);
+    if (dcpl_id < 0) CALLBACK_ERROR("H5Dget_create_plist", dset_name)
 
-    /* if base dataset is zero-sized, just create dataset key_name */
+    /* if the dataset is zero-sized, just create dataset */
     if (dset_dims[0] == 0) {
-        err = H5Dclose(base_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", base_name)
+        err = H5Dclose(dset);
+        if (err < 0) CALLBACK_ERROR("H5Dclose", dset_name)
         goto seq_create;
     }
 
@@ -233,41 +245,61 @@ herr_t add_seq(bool        dry_run,
         *avg_len += dset_dims[0];
     }
 
-    /* allocate buffer */
-    buf  = (unsigned int*) malloc(dset_dims[0] * (index_levels.size()+1) * sizeof(unsigned int));
+    /* number of index datasets */
+    ndsets = index_levels.size();
 
-    /* read the entire base dataset to the end of the buffer */
-    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  buf + index_levels.size()*dset_dims[0]);
-    if (err < 0) CALLBACK_ERROR("H5Dread", base_name);
-    if ((err = H5Dclose(base_id))  < 0) CALLBACK_ERROR("H5Dclose", base_name);    
+    /* allocate read buffer */
+    buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
+    buf_ptr = buf;
 
-    /* read each index level into buffer */
-    for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
-	string level_basename = basename(index_levels[ilvl]);
-	
-	/* open dataset run in this group */
-	level_id = H5Dopen(grp_id, level_basename.c_str(), H5P_DEFAULT);
-	if (level_id < 0) CALLBACK_ERROR("H5Dopen", level_basename.c_str());
+    /* read the entire first dataset to the buffer */
+    err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+    if (err < 0) CALLBACK_ERROR("H5Dread", dset_name);
+    if ((err = H5Dclose(dset))  < 0) CALLBACK_ERROR("H5Dclose", dset_name);
 
-	/* read the entire dataset run */
-	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-		      buf+ilvl*dset_dims[0]);
-	if (err < 0) CALLBACK_ERROR("H5Dread", level_basename.c_str());
-	if ((err = H5Dclose(level_id))  < 0) CALLBACK_ERROR("H5Dclose", level_basename.c_str());
+    buf_ptr += dset_dims[0];
+
+    /* read remaining index datasets into buffer */
+    for (ii=1; ii<ndsets; ii++) {
+        dset_name = index_levels[ii].c_str();
+
+        /* check if dataset exists */
+        src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
+        if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
+        if (src_exist == 0) {
+            if (verbose)
+                printf("Warn: dataset '%s/%s' not exist, skip this group.\n",
+                       grp_name,dset_name);
+            free(buf);
+            goto fn_exit;
+        }
+
+        /* open dataset */
+        dset = H5Dopen(grp_id, dset_name, H5P_DEFAULT);
+        if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
+
+        /* read the entire dataset */
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                      buf_ptr);
+        if (err < 0) CALLBACK_ERROR("H5Dread", dset_name)
+
+        /* close the dataset */
+        if ((err = H5Dclose(dset)) < 0) CALLBACK_ERROR("H5Dclose", dset_name)
+
+        buf_ptr += dset_dims[0];
     }
 
     GET_TIMER(ts, te, timing[0])
 
-    /* allocate buffer for dataset seq */
+    /* allocate buffer for partition key dataset, seq */
     seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
 
     /* table look up the seq values */
-    for (i=0; i<dset_dims[0]; i++) {
-	keyv key(index_levels.size()+1);
-	for(auto ilvl = 0u; ilvl < key.size(); ilvl++)
-	    key[ilvl]  = buf[dset_dims[0]*ilvl + i];
-	seq_buf[i] = lookup_table[key];
+    for (ii=0; ii<dset_dims[0]; ii++) {
+        keyv key(ndsets);
+        for (jj=0; jj<ndsets; jj++)
+            key[jj] = buf[dset_dims[0]*jj + ii];
+        seq_buf[ii] = lookup_table[key];
     }
 
     free(buf);
@@ -275,39 +307,44 @@ herr_t add_seq(bool        dry_run,
     GET_TIMER(ts, te, timing[1])
 
 seq_create:
-    if (!dry_run) {
-        char key_name[1024];
-        sprintf(key_name, "%s.seq", base_name);
+    sprintf(key_name, "%s.seq", part_key_base);
 
-        /* create a new dataset */
-        seq_id = H5Dcreate2(grp_id, key_name, H5T_STD_I64LE, space_id,
-                            H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", key_name)
+    /* create the new partition key dataset */
+    seq_id = H5Dcreate2(grp_id, key_name, H5T_STD_I64LE, space_id, H5P_DEFAULT,
+                        dcpl_id, H5P_DEFAULT);
+    if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", key_name)
 
-        /* write seq (entire dataset) */
-        if (dset_dims[0] > 0) {
-            err = H5Dwrite(seq_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL,
-                           H5P_DEFAULT, seq_buf);
-            if (err < 0) CALLBACK_ERROR("H5Dwrite", key_name)
-        }
-
-        GET_TIMER(ts, te, timing[2])
-
-        /* close dataset */
-        err = H5Dclose(seq_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
+    /* write the entire dataset */
+    if (dset_dims[0] > 0) {
+        err = H5Dwrite(seq_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                       seq_buf);
+        if (err < 0) CALLBACK_ERROR("H5Dwrite", key_name)
     }
-    if (dset_dims[0] > 0) free(seq_buf);
 
+    GET_TIMER(ts, te, timing[2])
+
+    /* close dataset */
+    err = H5Dclose(seq_id);
+    if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
+
+    if (seq_buf != NULL) free(seq_buf);
+
+fn_exit:
     /* close create property */
-    err = H5Pclose(dcpl_id);
-    if (err < 0) RETURN_ERROR("H5Pclose", base_name)
+    if (dcpl_id >= 0) {
+        err = H5Pclose(dcpl_id);
+        if (err < 0) RETURN_ERROR("H5Pclose", dset_name)
+    }
     /* close space */
-    err = H5Sclose(space_id);
-    if (err < 0) CALLBACK_ERROR("H5Sclose", base_name)
+    if (space_id >= 0) {
+        err = H5Sclose(space_id);
+        if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
+    }
     /* close group */
-    err = H5Gclose(grp_id);
-    if (err < 0) CALLBACK_ERROR("H5Gclose", grp_name)
+    if (grp_id >= 0) {
+        err = H5Gclose(grp_id);
+        if (err < 0) CALLBACK_ERROR("H5Gclose", grp_name)
+    }
 
     GET_TIMER(ts, te, timing[3])
 
@@ -395,63 +432,62 @@ static void
 usage(char *progname)
 {
 #define USAGE   "\
-  [-h]          print this command usage message\n\
-  [-v]          verbose mode (default: off)\n\
-  [-n]          dry run without creating key datasets (default: disabled)\n\
-  -a dataset    full path to dataset used as additional index for calculating key\n\
-                multiple values allowed\n\
-  -r pattern    groups matching pattern are not injected with base_name.seq\n\
-  -k base_name  dataset name in group /spill to generate partitioning keys (required)\n\
-  file_name     input/output HDF5 file name (required)\n\n\
+  [-h]            print this command usage message\n\
+  [-v]            verbose mode (default: off)\n\
+  [-r pattern]    groups matching pattern are not injected with key dataset\n\
+  [-k indx_names] dataset names in group '/spill', separated by comma, to be\n\
+                  used to generate partition keys (default: run,subrun,evt)\n\
+  file_name       input/output HDF5 file name (required)\n\n\
   This utility program adds a new dataset in each group of the input file.\n\
   The new dataset, referred as the partition key dataset and to be named as\n\
-  'base_name.seq', can be used for data partitioning in parallel read\n\
-  operations. Its contents are generated based on the dataset 'base_name' in\n\
-  group '/spill'. This base dataset must contain a list of unique integer\n\
-  values, stored in an increasing order. An example is the dataset\n\
-  '/spill/evt'. The data partitioning strategy for parallel reads is to\n\
-  assign the dataset elements with the same 3-tuple of 'run', 'subrun', and\n\
-  the base dataset to the same MPI process. Thus the partition key dataset\n\
-  created in the output file stores a list of unique IDs corresponding to\n\
-  the unique 3-tuples. The unique IDs are consistent among datasets across\n\
-  all groups. Requirements for the HDF5 file:\n\
-    1. must contain datasets /spill/run and /spill/subrun\n\
+  'last_name.seq', where 'last_name' is the name of last dataset provided in\n\
+  the argument 'indx_names' of command-line option '-k'. The partition key\n\
+  dataset is to be used for data partitioning purpose in parallel read\n\
+  operations of the HDF5 file. Its contents are generated based on those\n\
+  index datasets in group '/spill', whose names are provided in the argument\n\
+  of command-line option '-k'. The default is 'run,subrun,evt' if option '-k'\n\
+  is not used. These datasets together provide a list of unique identifiers,\n\
+  which can be used to generate an array integers stored in an increasing\n\
+  order. An example is '-k run,subrun,cycle,evt'. The data partitioning\n\
+  strategy for parallel reads is to assign the dataset elements with the same\n\
+  4-tuple of (run, subrun, cycle, evt) to the same MPI process. Thus, the\n\
+  partition key dataset, named 'evt.seq' in this example, created in each\n\
+  group stores a list of unique IDs corresponding to the unique 4-tuples. The\n\
+  values in dataset 'evt.seq' are consistent across all groups. Requirements\n\
+  for the input HDF5 file:\n\
+    1. group '/spill' must contain datasets provided in option '-k'. If '-k'\n\
+       option is not used, the default datasets 'run,subrun,evt' must exist.\n\
     2. contains multiple groups at root level\n\
     3. each group may contain multiple 2D datasets\n\
     4. all datasets in the same group share the 1st dimension size\n\
-    5. each group must contain datasets run, subrun, and 'base_name'\n\
-    6. the second dimension size of the 3 datasets must be 1\n\
-    7. data type of the 3 datasets must be H5T_STD_U32LE\n\
-  Additional datasets can be added to the n-tuple for creating the key for data\n\
-  partitioning strategy. This dataset does not need to be contained in the /spill\n\
-  group, but does need to be contained in all other groups for which the partition\n\
-  key is calculated. An example from NOvA Monte Carlo files is /rec.hdr/cycle.\n\
-  In this case, cycle must be a valid dataset in each group where the partition key\n\
-  is injected, and the n-tuple used to create the key is\n\
-  {'run', 'subrun', 'cycle', base_name}.\n\
+    5. other groups may not contain datasets provided in option '-k'. For\n\
+       those groups, adding the key partition datasets is skip.\n\
+    6. second dimension size of datasets provided in option '-k' must be 1\n\
+    7. datasets provided in option '-k' will be read and type-cast into\n\
+       internal buffers of type 'long long int' before sorting is applied.\n\
+       Users are warned for possible data type overflow, if there is any.\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v] -k base_name file_name\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-r pattern] -k indx_names file_name\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    bool dry_run=false;
     int c, err_exit=0, ndims;
-    char msg[1024], *infile=NULL, dset_name[1024], *part_key_base=NULL;
-    herr_t err;
-    hid_t file_id=-1, fapl_id=-1, level_id, base_id, space_id;
-    hsize_t dset_dims[2], maxdims[2];
-    unsigned int *buf=NULL;
-    H5G_info_t grp_info;
-    size_t i, num_orig_groups=0, num_nonzero_groups=0;
+    char *infile=NULL, dset_name[1024], part_key_base[1024];
+    char *token, *dset_list=NULL, *pattern=NULL;
+    size_t ii, num_orig_groups=0, num_nonzero_groups=0, ndsets;
     size_t max_seq=0, min_seq=0, avg_seq=0;
+    long long *buf=NULL, *buf_ptr;
     double timing[6], stime[6];
+    herr_t err;
+    hid_t fid=-1, fapl_id=-1, dset, space_id;
+    hsize_t dset_dims[2], maxdims[2];
+    H5G_info_t grp_info;
     table lookup_table;
     regex_t regex;
-    char * pattern = NULL;
-    vector<string> index_levels(DEFAULT_INDEX_LEVELS);
+    vector<string> index_levels;
 
     struct op_data it_op;
     it_op.num_groups = 0;
@@ -461,36 +497,24 @@ int main(int argc, char **argv)
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
 #endif
-    for (c=0; c<6; c++) timing[c] = 0.0;
-    for (c=0; c<6; c++) stime[c] = 0.0;
+    for (c=0; c<6; c++) timing[c] = stime[c] = 0.0;
 
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvna:r:k:")) != -1)
+    while ((c = getopt(argc, argv, "hvr:k:")) != -1)
         switch(c) {
-            case 'h': usage(argv[0]);
-                      err_exit = -1;
-                      goto fn_exit;
             case 'v': verbose = 1;
                       break;
-            case 'k': part_key_base = strdup(optarg);
+            case 'k': dset_list = strdup(optarg);
                       break;
-            case 'n': dry_run = true;
+            case 'r': pattern = strdup(optarg);
                       break;
-	    case 'r': pattern = strdup(optarg);
-		      break;
-	    case 'a': index_levels.push_back(optarg);
-	              break;
-            default: break;
+            case 'h': usage(argv[0]);
+                      return 0;
+            default:  usage(argv[0]);
+                      return 1;
         }
-
-    if (part_key_base == NULL) { /* key base dataset name is mandatory */
-        printf("Error: partition key base dataset name is missing.\n\n");
-        usage(argv[0]);
-        err_exit = -1;
-        goto fn_exit;
-    }
 
     if (argv[optind] == NULL) { /* input file name is mandatory */
         printf("input file is missing\n");
@@ -500,18 +524,30 @@ int main(int argc, char **argv)
     }
 
     if (pattern && regcomp(&regex, pattern, 0)) { /* check valid regex */
-	printf("Error: input pattern %s does not compile", pattern);
-	usage(argv[0]);
-	err_exit = -1;
-	goto fn_exit;
+        printf("Error: input pattern %s does not compile", pattern);
+        usage(argv[0]);
+        err_exit = -1;
+        goto fn_exit;
     }
     else if(pattern) { /* valid regex */
-	it_op.regex = &regex;
+        it_op.regex = &regex;
     }
 
     infile = strdup(argv[optind]);
-
     if (verbose) printf("input file: %s\n", infile);
+
+    /* construct index datasets into individual strings */
+    if (dset_list == NULL) /* default datasets */
+        dset_list = strdup("run,subrun,evt");
+
+    /* tokenize dest_list */
+    token = strtok(dset_list, ",");
+    while (token != NULL) {
+        index_levels.push_back(token);
+        token = strtok(NULL, ",");
+    }
+    /* use the last dataset name, as base for key */
+    strcpy(part_key_base, index_levels.back().c_str());
 
     SET_TIMER(ts)
 
@@ -524,35 +560,27 @@ int main(int argc, char **argv)
     if (err < 0) HANDLE_ERROR("incr_raw_data_chunk_cache")
 
     /* open input file */
-    if (dry_run)
-        /* read-only mode  */
-        file_id = H5Fopen(infile, H5F_ACC_RDONLY, fapl_id);
-    else
-        /* read-and-write mode  */
-        file_id = H5Fopen(infile, H5F_ACC_RDWR, fapl_id);
-    if (file_id < 0) {
-        sprintf(msg, "Can't open input file %s\n", infile);
-        HANDLE_ERROR(msg)
-    }
-    
+    fid = H5Fopen(infile, H5F_ACC_RDWR, fapl_id);
+    if (fid < 0) HANDLE_ERROR("H5Fopen")
+
     GET_TIMER(ts, te, timing[0])
 #if defined PROFILE && PROFILE
-    printf("Open input file                   = %7.2f sec\n", timing[0]);
+    printf("Open input file                           = %7.2f sec\n",timing[0]);
 #endif
 
     /* retrieve the number of groups */
-    err = H5Gget_info_by_name(file_id, "/", &grp_info, H5P_DEFAULT);
+    err = H5Gget_info_by_name(fid, "/", &grp_info, H5P_DEFAULT);
     if (err < 0) RETURN_ERROR("H5Gget_info_by_name", "root group")
     num_orig_groups = grp_info.nlinks;
     it_op.grp_names = (char**) malloc(num_orig_groups * sizeof(char*));
 
     /* Iterate all objects to collect names of all group */
 #if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
-    err = H5Ovisit3(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
+    err = H5Ovisit3(fid, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
                     &it_op, H5O_INFO_ALL);
     if (err < 0) HANDLE_ERROR("H5Ovisit3")
 #else
-    err = H5Ovisit(file_id, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
+    err = H5Ovisit(fid, H5_INDEX_NAME, H5_ITER_NATIVE, gather_grp_names,
                    &it_op);
     if (err < 0) HANDLE_ERROR("H5Ovisit")
 #endif
@@ -560,78 +588,83 @@ int main(int argc, char **argv)
 
     GET_TIMER(ts, te, timing[1])
 #if defined PROFILE && PROFILE
-    printf("Collect group names               = %7.2f sec\n", timing[1]);
+    printf("Collect group names                       = %7.2f sec\n",timing[1]);
 #endif
 
-    /* open dataset /spill/base */
-    sprintf(dset_name, "/spill/%s", part_key_base);
-    base_id = H5Dopen(file_id, dset_name, H5P_DEFAULT);
-    if (base_id < 0) RETURN_ERROR("H5Dopen", dset_name)
+    /* number of index datasets */
+    ndsets = index_levels.size();
+    assert(ndsets > 0);
+    if (verbose) cout << "number of index datasets = " << ndsets << endl;
 
-    /* collect dimension sizes of /spill/base */
-    space_id = H5Dget_space(base_id);
-    if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name);
-    ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
-    if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name);
-    err = H5Sclose(space_id);
-    if (err < 0) RETURN_ERROR("H5Sclose", dset_name);
-
-    /* allocate buffers for /spill/run, /spill/subrun, /spill/base
-     * All 3 are of the same size, as they belong to the same group.
+    /* open the first index dataset in group /spill to collect the 1st
+     * dimension size. Note all datasets in group /spill should have the same
+     * 1st dimension size.
      */
-    buf  = (unsigned int*) malloc(dset_dims[0] * (index_levels.size()+1) * sizeof(unsigned int));
-    
-    /* read the entire dataset /spill/base to the end of the buffer */
-    err = H5Dread(base_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                  buf + index_levels.size() * dset_dims[0]);
-    if (err < 0) RETURN_ERROR("H5Dread", dset_name);
-    if ((err = H5Dclose(base_id)) < 0) RETURN_ERROR("H5Dclose", dset_name);
+    sprintf(dset_name, "/spill/%s", index_levels[0].c_str());
+    dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
+    if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
 
-    printf("buffer size (nelements): %llu\n", dset_dims[0]*(index_levels.size()+1));
-    /* loop over index levels and insert datasets into buffer */
-    for(auto ilvl = 0u; ilvl < index_levels.size(); ilvl++) {
-	printf("Index Level %u: %s\n", ilvl, index_levels[ilvl].c_str());
-	printf("\tbuffer range: (%llu, %llu)\n", ilvl*dset_dims[0], (ilvl+1)*dset_dims[0]-1);
+    /* collect dimension sizes */
+    space_id = H5Dget_space(dset);
+    if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name)
+    ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
+    if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name)
+    err = H5Sclose(space_id);
+    if (err < 0) RETURN_ERROR("H5Sclose", dset_name)
 
+    /* allocate buffers for all index datasets */
+    buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
+    buf_ptr = buf;
 
-	/* open index level dataset */
-	level_id = H5Dopen(file_id, index_levels[ilvl].c_str(), H5P_DEFAULT);
-	if (level_id < 0) RETURN_ERROR("H5Dopen", index_levels[ilvl].c_str());
+    /* read the entire 1st index dataset */
+    if (verbose) printf("Read index dataset %s\n", dset_name);
+    err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+    if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+    if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
 
-	/* read the entire dataset */
-	err = H5Dread(level_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-		      buf + ilvl * dset_dims[0]); /* offset by multiples of the dataset size */
-	if (err < 0) RETURN_ERROR("H5Dread", index_levels[ilvl].c_str());
+    buf_ptr += dset_dims[0];
 
-	/* close dataset */
-	if ((err = H5Dclose(level_id))  < 0) RETURN_ERROR("H5Dclose", index_levels[ilvl].c_str());
+    /* read the remaining index datasets into buffer */
+    for (ii=1; ii<ndsets; ii++) {
+        sprintf(dset_name, "/spill/%s", index_levels[ii].c_str());
+        if (verbose) printf("Read index dataset %s\n", dset_name);
+
+        /* open index dataset */
+        dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
+        if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
+
+        /* read the entire dataset */
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                      buf_ptr);
+        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+
+        /* close dataset */
+        if ((err = H5Dclose(dset))  < 0) RETURN_ERROR("H5Dclose", dset_name)
+
+        buf_ptr += dset_dims[0];
     }
 
     GET_TIMER(ts, te, timing[2])
 #if defined PROFILE && PROFILE
-    printf("Read 'spill' 3-tuples             = %7.2f sec\n", timing[2]);
+    printf("Read partition index datasets in '/spill' = %7.2f sec\n",timing[2]);
 #endif
 
-    /* build a lookup table based on datasets run, subrun, (+), and base */
-    lookup_table = build_lookup_table(dset_dims[0], 
-				      index_levels.size()+1,
-				      buf);
+    /* build a lookup table based on the index datasets */
+    lookup_table = build_lookup_table(dset_dims[0], ndsets, buf);
 
     if (buf != NULL) free(buf);
 
     GET_TIMER(ts, te, timing[3])
 #if defined PROFILE && PROFILE
-    printf("Construct lookup table            = %7.2f sec\n", timing[3]);
+    printf("Construct lookup table                    = %7.2f sec\n",timing[3]);
 #endif
 
-    /* Iterate all groups and add a new dataset named 'part_key_base'.seq to
-     * each group.
-     */
-    for (i=0; i<it_op.num_groups; i++) {
-        err = add_seq(dry_run, file_id, index_levels, it_op.grp_names[i], part_key_base,
+    /* Iterate all groups and create a new key dataset in each group */
+    for (ii=0; ii<it_op.num_groups; ii++) {
+        err = add_seq(fid, index_levels, it_op.grp_names[ii], part_key_base,
                       lookup_table, &num_nonzero_groups, &max_seq, &min_seq,
                       &avg_seq, stime);
-        if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[i])
+        if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[ii])
     }
     if (num_nonzero_groups > 0)
         avg_seq /= num_nonzero_groups;
@@ -642,13 +675,13 @@ int main(int argc, char **argv)
 
 fn_exit:
     if (it_op.grp_names != NULL) {
-        for (i=0; i<num_orig_groups; i++)
-            free(it_op.grp_names[i]);
+        for (ii=0; ii<num_orig_groups; ii++)
+            free(it_op.grp_names[ii]);
         free(it_op.grp_names);
     }
-    if (file_id >= 0) {
-        check_h5_objects(infile, file_id);
-        err = H5Fclose(file_id);
+    if (fid >= 0) {
+        check_h5_objects(infile, fid);
+        err = H5Fclose(fid);
         if (err < 0) printf("Error at line %d: H5Fclose\n",__LINE__);
     }
     if (fapl_id >= 0) {
@@ -661,12 +694,14 @@ fn_exit:
 #if defined PROFILE && PROFILE
     if (err_exit == 0) {
         printf("-------------------------------------------------------\n");
-        printf("Dry-run mode                      = %s\n", dry_run?"YES":"NO");
         printf("Input file name                   = %s\n", infile);
-        printf("Partition key base dataset name   = %s\n", part_key_base);
         printf("number of groups in the file      = %zd\n", num_orig_groups);
         printf("number of non-zero size groups    = %zd\n", num_nonzero_groups);
-        printf("Partition key name                = %s.seq\n",part_key_base);
+        printf("Partition index dataset names     = %s",index_levels[0].c_str());
+        for (ii=1; ii<ndsets; ii++)
+            printf(", %s", index_levels[ii].c_str());
+        printf("\n");
+        printf("Partition key dataset name        = %s.seq\n",part_key_base);
         printf("  max length among all groups     = %zd\n", max_seq);
         printf("  min length among all groups     = %zd\n", min_seq);
         printf("  avg length among all groups     = %zd\n", avg_seq);
@@ -676,10 +711,10 @@ fn_exit:
         printf("Read 'spill' 3-tuples             = %7.2f sec\n", timing[2]);
         printf("Construct lookup table            = %7.2f sec\n", timing[3]);
         printf("Add partition key datasets        = %7.2f sec\n", timing[4]);
-        printf("  Read run, subrun, base datasets = %7.2f sec\n", stime[0]);
+        printf("  Read partition index datasets   = %7.2f sec\n", stime[0]);
         printf("  Hash table lookup               = %7.2f sec\n", stime[1]);
-        printf("  Write partition key seq         = %7.2f sec\n", stime[2]);
-        printf("  Close partition key seq         = %7.2f sec\n", stime[3]);
+        printf("  Write partition key datasets    = %7.2f sec\n", stime[2]);
+        printf("  Close partition key datasets    = %7.2f sec\n", stime[3]);
         printf("File close                        = %7.2f sec\n", timing[5]);
         printf("-------------------------------------------------------\n");
         printf("End-to-end                        = %7.2f sec\n",
@@ -688,7 +723,6 @@ fn_exit:
     }
 #endif
     if (infile != NULL) free(infile);
-    if (part_key_base != NULL) free(part_key_base);
 
     return (err_exit != 0);
 }

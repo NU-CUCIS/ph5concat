@@ -1,12 +1,15 @@
 # Utility Programs
 
 * [rechunk](#rechunk) -- adjusts chunk settings of all datasets in a given
-  HDF5 file
+  HDF5 file.
+* [add_spill_index](#add_spill_index) -- adds a new dataset in group '/spill'
+  of the input HDF5 file.
 * [add_key](#add_key) -- adds partitioning key datasets to all groups
-* [sort_file_list](#sort_file_list) -- sorts file names based on the run and subrun IDs stored in the files
+* [sort_file_list](#sort_file_list) -- sorts file names based on the values
+  of a list of given datasets.
 * [check_seq_incr](#check_seq_incr) -- checks contents of partitioning
   key datasets in all groups for whether their values are organized in a
-  monotonically nondecreasing order
+  monotonically nondecreasing order.
 
 ---
 ## rechunk
@@ -84,77 +87,129 @@ A shell script to run `rechunk` on multiple files in batch is given in
   ```
 
 ---
+## add_spill_index
+
+**add_spill_index** is a utility program to be run in sequential. Given an HDF5
+file from NOvA experiments, it adds a new dataset in group '/spill'. The
+argument of command-line option '-s' requires the full path of a dataset. The
+path should be in the form of '/group/dset'. The new dataset to be created will
+be '/spill/dset' whose contents will be single-valued, populated from the first
+element of '/group/dset'. This new dataset is intended to be used as an
+additional index dataset for generating the partition key datasets.
+
+Command usage:
+  ```
+  % ./add_spill_index -h
+  Usage: add_spill_index [-h|-v|-n] -s src_path file_name
+    [-h]          print this command usage message
+    [-v]          verbose mode (default: off)
+    [-n]          dry-run mode (default: off)
+    -s src_path   full path of dataset whose first element's value will be used
+                  to populate the new dataset in group '/spill' (required)
+    file_name     input/output HDF5 file name (required)
+
+    This utility program adds a new dataset in group '/spill' of the input
+    file. Argument 'src_path' should be in the form of '/group/dset'. The new
+    dataset to be created will be '/spill/dset', whose contents will be
+    single-valued, populated from the first element of '/group/dset'. This new
+    dataset is intended to be used as an additional index dataset for
+    generating partition key datasets. Requirements for the HDF5 file:
+      1. must contain group '/spill'
+      2. contains multiple groups at root level
+      3. each group may contain multiple 2D datasets
+      4. all datasets in the same group share the 1st dimension size
+      5. dataset src_path must exist, except for the one in group '/spill'
+      6. the second dimension size of the dataset 'dset' must be 1
+    *ph5concat version 1.1.0 of March 1, 2020.
+  ```
+Example run:
+  ```
+  % ./add_spill_index -s /rec.energy.nue/cycle nd_data_165_files.h5
+  ```
+---
 ## add_key
 
 **add_key** is a utility program to be run in sequential. Given an HDF5 file
-from NOvA experiments, it adds in each group a new dataset named
-`base_name.seq` where 'base_name' is provided from command-line option '-k'.
-This dataset is referred as partitioning key dataset. It is to be used to
-calculate data partitioning boundaries for parallel programs that read the
-file. The contents of partition ley datasets are calculated based on three
-existing datasets in the same group: `run`, `subrun`, and `base_name`. The
-3-tuple (run[i], subrun[i], base_name[i]) forms a unique ID. Data elements with
-the same ID are assigned to the same MPI processes when the file is read in
-parallel. The 3-tuple (run, subrun, base) works similarly to the primary key in
-the relational database that uniquely identifies a data element. Generation of
-`base_name.seq` is described as followed.
+from NOvA experiments, it adds a new dataset in each group of the input file.
+The new dataset, referred as the partition key dataset and to be named as
+'last_name.seq', where 'last_name' is the name of last dataset provided in the
+argument 'indx_names' of command-line option '-k'. The partition key dataset is
+to be used for data partitioning purpose in parallel read operations of the
+HDF5 file. Its contents are generated based on those datasets in group
+'/spill', whose names are provided in the argument of command-line option '-k'.
+These datasets together provide a list of unique identifiers, which can be used
+to generate an array integers stored in an increasing order. An example is '-k
+run,subrun,evt'. The data partitioning strategy for parallel reads is to assign
+the dataset elements with the same 3-tuple of (run, subrun, evt) to the same
+MPI process. Thus, the partition key dataset, named 'evt.seq' in this example,
+created in each group stores a list of unique IDs corresponding to the unique
+3-tuples. The values in dataset 'evt.seq' are consistent across all groups.
 
-At first, datasets `run`, `subrun`, and `base_name` in group `spill` are used
-to construct a C++ `unordered_map` as a hash table, where (run[i], subrun[i],
-base_name[i]) is a hash key. The hash values are the indices of 3-tuples.
-Because the contents of dataset `base_name` contain a list of unique integers,
-stored in an increasing order, the hash values are unique for unique 3-tuples.
-The constructed hash table is then used to create `base_name.seq` in all other
-groups. Note the values in `base_name.seq` are consistent among datasets cross
-all groups. In other words, two dataset elements have the same `base_name.seq`
-value if their 3-tuples are the same.
+At first, the index datasets specified in option '-k' in group '/spill' are
+used to construct a hash table (a C++ `unordered_map` object), where the
+N-tuple, where N is the number of index datasets, is a hash key. The hash
+values are the indices of N-tuples. Because each of all the index datasets
+contains a list of unique integers which have already been sorted in a
+monotonically nondecreasing order, the hash values are unique for unique
+N-tuples.  The constructed hash table is then used to create the partition key
+datasets in all other groups. Note the contents of key datasets are consistent
+cross all groups. In other words, two dataset elements have the same key
+dataset value if their N-tuples are the same.
 
-Note the integer numbers in `base_name.seq` in all groups, except group
-'spill', are in a monotonically nondecreasing order. Values can be repeated.
-In group 'spill', the values in `base_name.seq` will start from 0 and increment
-by 1, with no repeated value.
+Note the integer numbers in the partition key datasets in all groups are sorted
+in a monotonically nondecreasing order. Values can be repeated. However, in
+group '/spill', the values are also sorted, but starting from 0 with increment
+of 1, with no repeated value.
 
 Command usage:
   ```
   % ./add_key -h
-  Usage: ./add_key [-h|-v] -k base_name file_name
-    [-h]          print this command usage message
-    [-v]          verbose mode (default: off)
-    [-n]          dry run without creating key datasets (default: disabled)
-    -k base_name  dataset name in group /spill to generate partitioning keys (required)
-    file_name     input/output HDF5 file name (required)
+  Usage: ./add_key [-h|-v|-r pattern] -k indx_names file_name
+    [-h]            print this command usage message
+    [-v]            verbose mode (default: off)
+    [-r pattern]    groups matching pattern are not injected with key dataset
+    [-k indx_names] dataset names in group '/spill', separated by comma, to be
+                    used to generate partition keys (default: run,subrun,evt)
+    file_name       input/output HDF5 file name (required)
 
     This utility program adds a new dataset in each group of the input file.
     The new dataset, referred as the partition key dataset and to be named as
-    'base_name.seq', can be used for data partitioning in parallel read
-    operations. Its contents are generated based on the dataset 'base_name' in
-    group '/spill'. This base dataset must contain a list of unique integer
-    values, stored in an increasing order, not necessarily incremented by one.
-    An example is the dataset '/spill/evt'. The data partitioning strategy for
-    parallel reads is to assign the dataset elements with the same 3-tuple of
-    'run', 'subrun', and the base dataset to the same MPI process. Thus the
-    partition key dataset created in the output file stores a list of unique
-    IDs corresponding to the unique 3-tuples. The unique IDs are consistent
-    among datasets across all groups. Requirements for the HDF5 file:
-      1. must contain datasets /spill/run and /spill/subrun
+    'last_name.seq', where 'last_name' is the name of last dataset provided in
+    the argument 'indx_names' of command-line option '-k'. The partition key
+    dataset is to be used for data partitioning purpose in parallel read
+    operations of the HDF5 file. Its contents are generated based on those
+    index datasets in group '/spill', whose names are provided in the argument
+    of command-line option '-k'. The default is 'run,subrun,evt' if option '-k'
+    is not used. These datasets together provide a list of unique identifiers,
+    which can be used to generate an array integers stored in an increasing
+    order. An example is '-k run,subrun,cycle,evt'. The data partitioning
+    strategy for parallel reads is to assign the dataset elements with the same
+    4-tuple of (run, subrun, cycle, evt) to the same MPI process. Thus, the
+    partition key dataset, named 'evt.seq' in this example, created in each
+    group stores a list of unique IDs corresponding to the unique 4-tuples. The
+    values in dataset 'evt.seq' are consistent across all groups. Requirements
+    for the input HDF5 file:
+      1. group '/spill' must contain datasets provided in option '-k'. If '-k'
+         option is not used, the default datasets 'run,subrun,evt' must exist.
       2. contains multiple groups at root level
       3. each group may contain multiple 2D datasets
       4. all datasets in the same group share the 1st dimension size
-      5. each group must contain datasets run, subrun, and 'base_name'
-      6. the second dimension size of the 3 daatsets must be 1
-      7. data type of the 3 datasets must be H5T_STD_U32LE
+      5. other groups may not contain datasets provided in option '-k'. For
+         those groups, adding the key partition datasets is skip.
+      6. second dimension size of datasets provided in option '-k' must be 1
+      7. datasets provided in option '-k' will be read and type-cast into
+         internal buffers of type 'long long int' before sorting is applied.
+         Users are warned for possible data type overflow, if there is any.
     *ph5concat version 1.1.0 of March 1, 2020.
   ```
 Example run and output:
   ```
-  % ./add_key -k evt nd_data_165_files.h5
-
-  Dry-run mode                      = NO
+  % ./add_key -k run,subrun,cycle,evt nd_data_165_files.h5
   Input file name                   = nd_data_165_files.h5
-  Partition key base dataset name   = evt
   number of groups in the file      = 999
   number of non-zero size groups    = 108
-  Partition key name                = evt.seq
+  Partition index dataset names     = run, subrun, cycle, evt
+  Partition key dataset name        = evt.seq
     max length among all groups     = 1695404032
     min length among all groups     = 193325
     avg length among all groups     = 30787342
@@ -164,10 +219,10 @@ Example run and output:
   Read 'spill' 3-tuples             =    0.01 sec
   Construct lookup table            =    0.00 sec
   Add partition key dataset         =  721.86 sec
-    Read run, subrun, base datasets =  111.33 sec
+    Read partition index datasets   =  111.33 sec
     Hash table lookup               =  610.00 sec
-    Write partition key seq         =    0.53 sec
-    Close partition key seq         =    1.05 sec
+    Write partition key datasets    =    0.53 sec
+    Close partition key datasets    =    1.05 sec
   File close                        =    0.08 sec
   -------------------------------------------------------
   End-to-end                        =  722.81 sec
@@ -175,41 +230,50 @@ Example run and output:
 ---
 ## sort_file_list
 
-**sort_file_list** is a utility program to be run in sequential. Given  a list
-of NOvA file names, it sorts the file names based on the values of two
-datasets: 'run' and 'subrun' by default. The sorted file names are stored in a text file.
-The sorting order first follows the run IDs and then subrun IDs. Additional datasets 
-can be included in the sorting with `-a`.
-The output file can be used as an input to the parallel dataset concatenation program
-`ph5_concat`, so that the concatenated data is organized in  an increasing
-order of run and subrun IDs.
+**sort_file_list** is a utility program to be run in sequential. Given a list
+of NOvA file names, it sorts the file paths based on the values of first
+element of a list of index datasets provided in the argument of command-line
+option '-k'. When option '-k' is not used, the default datasets used for
+sorting are '/spill/run' and '/spill/subrun'. The sorted file paths are output
+in a text file. The sorting order follows the appearing order of datasets in
+the argument of option '-k'. Note only the first element of the datasets are
+used in the sorting. The output file is intended to be used as an input to the
+parallel dataset concatenation program `ph5_concat`, so that the concatenated
+data is organized in an increasing order of a given list of datasets.
 
 Command usage:
-   ```
-   % ./sort_file_list -h
-   [-h]          print this command usage message
-   [-v]          verbose mode (default: off)
-   [-d]          debug mode (default: off)
-   [-a]          full path to dataset used as additional index in multi-index sorting
-                 multiple values allowed
-   [-o outfile]  output file name (default: 'out_list.txt')
-   infile        input file name contains a list of HDF5 file names (required)
-  
-   This utility program re-order the file names in infile into a sorted list
-   based on the increasing order of 'run' and 'subrun' IDs. Additional IDs can
-   be used to sort with argument -a. Eg, -a /rec.hdr/cycle.
-   Requirements for the input HDF5 files:
-   1. must contain datasets '/spill/run' and '/spill/subrun'
-   2. may contain multiple groups at root level
-   3. each group may contain multiple 2D datasets
-   4. 1st dimension of all datasets in the same group share the same size
-   5. each group must contain datasets 'run' and 'subrun'
-   6. data type of datasets 'run' and 'subrun' must be H5T_STD_U32LE
-  *ph5concat version 1.1.0 of March 1, 2020.
+  ```
+  % ./sort_file_list -h
+  Usage: ./sort_file_list [-h|-v|-d|-k paths|-o outfile] infile
+    [-h]          print this command usage message
+    [-v]          verbose mode (default: off)
+    [-d]          debug mode (default: off)
+    [-k paths]    full paths to datasets, separated by comma, to be used for
+                  multi-index sorting. Only the first elements of the datasets
+                  are used in the sorting. (default: /spill/run,/spill/subrun)
+    [-o outfile]  output file name (default: 'out_list.txt')
+    infile        input file containing a list of HDF5 file paths (required)
+
+    This utility program re-order the file paths given in file 'infile' into a
+    sorted list, based on the increasing order of index datasets specified in
+    the argument of command-line option '-k'. When option '-k' is not used, the
+    default are datasets '/spill/run' and '/spill/subrun'. An example of its
+    usage is '-k /spill/run,/spill/subrun,/rec.hdr/cycle'. The index datasets
+    will be read and type-cast into internal buffers of type 'long long int',
+    before the sorting is applied. Sorting follows the order of datasets
+    appearing in the argument of option '-k'. Note the contents of outfile will
+    be overwritten if it exists. Requirements for the input HDF5 files:
+      1. must contain datasets '/spill/run' and '/spill/subrun' if command-line
+         option '-k' is not used
+      2. may contain multiple groups at root level
+      3. each group may contain multiple 2D datasets
+      4. 1st dimension of all datasets in the same group share the same size
+      5. datasets specified in argument '-k' must exist
+    *ph5concat version 1.1.0 of March 1, 2020.
   ```
 Example run and output:
   ```
-  % cat sample_in_list.txt 
+  % cat sample_in_list.txt
   ND/neardet_r00011981_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ND/neardet_r00011981_s07_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ND/neardet_r00011991_s01_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
@@ -219,7 +283,7 @@ Example run and output:
 
   % ./sort_file_list -o sample_out_list.txt sample_in_list.txt
 
-  % cat sample_out_list.txt 
+  % cat sample_out_list.txt
   ND1/neardet_r00011981_s06_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ND1/neardet_r00011981_s07_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5
   ND1/neardet_r00011981_s24_t00_R19-02-23-miniprod5.i_v1_data.h5caf.h5

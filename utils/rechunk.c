@@ -598,9 +598,6 @@ int main(int argc, char **argv)
     /* command-line arguments */
     while ((c = getopt(argc, argv, "hvdrstc:z:o:c:C:M:b:")) != -1)
         switch(c) {
-            case 'h': usage(argv[0]);
-                      err_exit = -1;
-                      goto fn_exit;
             case 'v': verbose = 1;
                       break;
             case 'd': in_memory_io = 0;
@@ -623,7 +620,10 @@ int main(int argc, char **argv)
                       break;
             case 'o': outfile = strdup(optarg);
                       break;
-            default: break;
+            case 'h': usage(argv[0]);
+                      return 0;
+            default : usage(argv[0]);
+                      return 1;
         }
 
     if (argv[optind] == NULL) { /* input file name is mandatory */

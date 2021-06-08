@@ -174,13 +174,14 @@ int main(int argc, char **argv)
     /* command-line arguments */
     while ((c = getopt(argc, argv, "hvd:")) != -1)
         switch(c) {
-            case 'h': usage(argv[0]);
-                      return 1;
             case 'v': verbose = 1;
                       break;
             case 'd': dname = strdup(optarg);
                       break;
-            default: break;
+            case 'h': usage(argv[0]);
+                      return 0;
+            default:  usage(argv[0]);
+                      return 1;
         }
 
     if (argv[optind] == NULL) { /* input file name is mandatory */

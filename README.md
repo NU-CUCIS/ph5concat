@@ -15,28 +15,32 @@ a given experiment can become very large, the performance scalability of such
 parallel data concatenation is important.
 
 ## Input HDF5 Files
-* Each file contains data from a single subrun. All groups contain at least 3
-  datasets named 'run', 'subrun', and 'evt'. The values in a 'run' dataset are
-  the same, representing the ID of a run. Similarly for 'subrun', the values in
-  a 'subrun' represent the ID of a subrun. However, the subrun IDs are unique
-  among all input files.
-* Each file contains multiple groups. The number of groups and group names are
-  the same among all input files.
+* Each file contains data from a single subrun only. All groups must contain
+  datasets 'run', 'subrun', and 'evt'. Values in dataset 'run' in all groups in
+  an input file must be the same, representing the ID of a run. Similarly, all
+  'subrun' datasets must be single-valued, represents the ID of a subrun. The
+  run IDs among all input files must be the same. The subrun IDs can be
+  different among input files.
+* Each file contains multiple groups. The number of groups and group names must
+  be the same among all input files.
 * Each group contains multiple datasets. The number of datasets in a group can
-  be different from each other. The number of datasets, dataset names, and
-  their memberships to the groups are the same among all input files.
+  be different from another group. For a given group, the number of datasets
+  and their names must be the same among the same groups in all input files.
 * All datasets are 2D arrays.
-* Datasets in the same group share the same size of 1st (most significant)
-  dimension. Their 2nd dimension sizes may be different.
+* All datasets in the same group of the same input file must share the size of
+  their 1st (most significant) dimension. Their 2nd dimension sizes may be
+  different.
 * Datasets in different groups may be of different 1st dimension sizes.
-* Some of the datasets are actually 1D arrays whose 2nd dimension is of size 1.
+* Some datasets are actually 1D arrays whose 2nd dimension is of size 1.
 * Datasets can be of size zero where their 1st dimension is of size 0.
-* All the files have the same "schema", i.e. same numbers of groups and
-  datasets, and their names.
+* All the files have the same "schema", i.e. same structures of groups and
+  datasets in groups, e.g. numbers of groups, and number of datasets in each
+  group, and their names.
 * The size of 1st dimension of a dataset in a group of an input file may be
-  different from the one in the same group but a different file.
+  different from the one with the same name and group membership in a different
+  input file.
 * The same datasets in the same group but in different input files share the
-  size of the 2nd dimension.
+  their 2nd dimension sizes.
 
 ## Output HDF5 File
 * A single HDF5 output file will be created (the default create mode), unless
@@ -102,35 +106,43 @@ parallel data concatenation is important.
   + `partitioning keys`: when command-line option '-k' is used, a new dataset
     will be created in each group in the output file, which can be used for
     data partitioning in parallel read operations. The new dataset, referred
-    as the partition key dataset, is named 'base_name.seq' where 'base_name' is
-    the dataset name provided in the command-line option '-k'. Contents of the
-    partition key dataset are generated based on the dataset 'base_name' in
-    group '/spill'. This base dataset must contain a list of unique integer
+    as the partition key dataset, is named 'base_name.seq' where 'base_name'
+    is the dataset name provided in the command-line option '-k'. Contents of
+    the partition key dataset are generated based on the dataset 'base_name'
+    in group '/spill'. This base dataset must contain a list of unique integer
     values, stored in an increasing order, not necessarily incremented by one.
-    An example is the dataset '/spill/evt'. The data partitioning strategy for
-    parallel reads is to assign the dataset elements with the same 3-tuple of
-    'run', 'subrun', and the base dataset to the same MPI process. Thus the
-    partition key dataset created in the output file stores a list of unique
-    IDs corresponding to the unique 3-tuples. The unique IDs are consistent
-    among datasets across all groups. When option '-k' is not used, the
-    partition key dataset will not be created.
+    An example is the dataset '/spill/evt'. A common practiice of parallel
+    reads of the concatenated file is to use the data partitioning strategy
+    that assigns dataset elements with the same values of 'run', 'subrun', and
+    the base dataset to the same MPI process. These 3 datasets are referred to
+    as 3-tuple index datasets. If this is the case, then users are recommended
+    to first use utility program [utils/sort_file_list](utils#sort_file_list)
+    to sort the input file names based on the values of run, subrun, and any
+    additional datasets into an increasing order, and use them to run this
+    concatenation program. This way, the partition key datasets created in the
+    output file store a list of unique IDs corresponding to the unique values
+    of 3-tuples, or N-tuple if the input files are sorted based on N index
+    datasets. The unique ID values in the key datasets are consistent across
+    all groups in the output file. When option '-k' is not used, the partition
+    key dataset will not be created.
   + I/O buffer size: when command-line option '-b' is used with value 0, this
     is equivalent to set the size to unlimited, i.e. the concatenator will
     allocate a buffer large enough to write each dataset in a single call to
     H5Dwrite. In this case, users may encounter out-of-memory errors.
   + I/O strategies: two I/O strategies (1 and 2) are currently supported. Both
     strategies share the same method for reading and writing the 1D datasets.
-    For 1D datasets, input files are first assigned disjointly and evenly among all
-    processes. Each process reads each 1D dataset entirely from the assigned files
-    and writes it to the output files using collective I/O. The difference between
-    staretgies 1 and 2 are for the 2D datasets. In strategy 1, all processes open
-    all input files collectively using MPI-IO and read all individual 2D datasets
-    collectively (i.e. shared-file reads), followed by all processes collectively
-    writing individual datasets to the output file. In this strategy, all reads
-    and writes are collective for each dataset. In strategy 2, each process reads
-    datasets only from the disjointly assigned file (i.e. no shared-file reads)
-    and then all processes collectively write each of the datasets to the output
-    file. In this strategy, reads are independent but writes are collective.
+    For 1D datasets, input files are first assigned disjointly and evenly
+    among all processes. Each process reads each 1D dataset entirely from the
+    assigned files and writes it to the output files using collective I/O. The
+    difference between staretgies 1 and 2 are for the 2D datasets. In strategy
+    1, all processes open all input files collectively using MPI-IO and read
+    all individual 2D datasets collectively (i.e. shared-file reads), followed
+    by all processes collectively writing individual datasets to the output
+    file. In this strategy, all reads and writes are collective for each
+    dataset. In strategy 2, each process reads datasets only from the
+    disjointly assigned file (i.e. no shared-file reads) and then all
+    processes collectively write each of the datasets to the output file. In
+    this strategy, reads are independent but writes are collective.
   + When using '-a' append mode, the output file must exist. The input files
     will be concatenated into the output file.
   + When using both options '-a' and '-k', the partitioning key datasets must

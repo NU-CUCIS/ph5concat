@@ -972,17 +972,17 @@ int check_h5_objects(const char *filename, hid_t fid)
     if (howmany > 1) printf("open objects:\n");
 
     for (ii=0; ii<howmany; ii++) {
-         string type_name="";
-         ot = H5Iget_type(objs[ii]);
-              if (ot == H5I_FILE)      continue; /*  type_name = "H5I_FILE"; */
-         else if (ot == H5I_GROUP)     type_name = "H5I_GROUP";
-         else if (ot == H5I_DATATYPE)  type_name = "H5I_DATATYPE";
-         else if (ot == H5I_DATASPACE) type_name = "H5I_DATASPACE";
-         else if (ot == H5I_DATASET)   type_name = "H5I_DATASET";
-         else if (ot == H5I_ATTR)      type_name = "H5I_ATTR";
-         H5Iget_name(objs[ii], obj_name, 1024);
-         printf("Still opened in file %s %4zd: type %s, name %s\n",
-                filename, ii, type_name.c_str(), obj_name);
+        string type_name="";
+        ot = H5Iget_type(objs[ii]);
+             if (ot == H5I_FILE)      continue; /*  type_name = "H5I_FILE"; */
+        else if (ot == H5I_GROUP)     type_name = "H5I_GROUP";
+        else if (ot == H5I_DATATYPE)  type_name = "H5I_DATATYPE";
+        else if (ot == H5I_DATASPACE) type_name = "H5I_DATASPACE";
+        else if (ot == H5I_DATASET)   type_name = "H5I_DATASET";
+        else if (ot == H5I_ATTR)      type_name = "H5I_ATTR";
+        H5Iget_name(objs[ii], obj_name, 1024);
+        printf("Still opened in file %s %4zd: type %s, name %s\n",
+               filename, ii, type_name.c_str(), obj_name);
     }
     free(objs);
     return howmany;

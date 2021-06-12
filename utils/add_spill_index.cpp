@@ -219,6 +219,7 @@ int main(int argc, char **argv)
         err_exit = -1;
         goto fn_exit;
     }
+    if (verbose) printf("src_path dataset '%s'\n", src_path);
 
     /* create memspace */
     mspace = H5Screate_simple(2, lens, NULL);
@@ -260,8 +261,8 @@ int main(int argc, char **argv)
     err = H5Sclose(fspace);
     if (err < 0) HANDLE_ERROR("H5Sclose")
 
-    if (verbose) /* print values we retrieved from the src_path datasets */
-        printf("src_path dataset %s = %e\n", src_path, inVal);
+    if (verbose) /* print values we retrieved from the src_path dataset */
+        printf("dataset src_path %s first element is %e\n", src_path, inVal);
 
     /* open spill group */
     spill_id = H5Gopen(file_id, "/spill", H5P_DEFAULT);

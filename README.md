@@ -111,6 +111,8 @@ parallel data concatenation is important.
     the partition key dataset are generated based on the dataset 'base_name'
     in group '/spill'. This base dataset must contain a list of unique integer
     values, stored in an increasing order, not necessarily incremented by one.
+    The value range of base dataset, i.e. the minimum and maximum values, in
+    one input file should not overlap with the ranges of any other files.
     An example is the dataset '/spill/evt'. A common practiice of parallel
     reads of the concatenated file is to use the data partitioning strategy
     that assigns dataset elements with the same values of 'run', 'subrun', and

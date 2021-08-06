@@ -1115,8 +1115,12 @@ void Concatenator::calculate_chunk_size(DSInfo_t &dset)
     /* no matter the dim size if larger or smaller than the threshold */
     if (dset.global_dims[1] == 1) /* 1D dataset */
         dset.chunk_dims[0] = chunk_len;
-    else /* 2D dataset */
-        dset.chunk_dims[0] = 128;
+    else { /* 2D dataset */
+        if (dset.global_dims[1] > 1024)
+            dset.chunk_dims[0] = 128;
+        else
+            dset.chunk_dims[0] = chunk_len;
+    }
 #endif
 
     dset.chunk_size = dset.chunk_dims[0] * dset.chunk_dims[1]

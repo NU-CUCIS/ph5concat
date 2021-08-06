@@ -349,35 +349,64 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
          * concatenated datasets as fixed-length. The string contents are
          * copied over to a fixed-length array.
          */
+        htri_t isVLEN = H5Tis_variable_str(dset.type_id);
         char **rdata = (char **) malloc (round_len * sizeof (char *));
         if (space_id == H5S_ALL) {
             space_id = H5Dget_space(dset_id);
             if (space_id < 0) HANDLE_ERROR("H5Dget_space")
         }
 
-        /* prepare reading the variable-length dataset */
-        hid_t filetype = H5Tcopy(H5T_C_S1);
-        if (filetype < 0) HANDLE_ERROR("H5Tcopy");
-        err = H5Tset_size(filetype, H5T_VARIABLE);
-        if (err < 0) HANDLE_ERROR("H5Tset_size");
-        err = H5Dread(dset_id, filetype, memspace_id, space_id, H5P_DEFAULT, rdata);
-        if (err < 0) HANDLE_ERROR("H5Dread");
-        err = H5Tclose(filetype);
-        if (err < 0) HANDLE_ERROR("H5Tclose");
+        if (isVLEN) {
+            /* prepare reading the variable-length dataset */
+            hid_t memtype = H5Tcopy(H5T_C_S1);
+            if (memtype < 0) HANDLE_ERROR("H5Tcopy");
+            err = H5Tset_size(memtype, H5T_VARIABLE);
+            if (err < 0) HANDLE_ERROR("H5Tset_size");
+            err = H5Dread(dset_id, memtype, memspace_id, space_id, H5P_DEFAULT, rdata);
+            if (err < 0) HANDLE_ERROR("H5Dread "+dset.name);
+            err = H5Tclose(memtype);
+            if (err < 0) HANDLE_ERROR("H5Tclose");
 
-        /* copy rdata[*] to buffer+mem_off */
-        hsize_t ii;
-        char *ptr = buffer+mem_off;
-        for (ii=0; ii<round_len; ii++) {
-            strncpy(ptr, rdata[ii], MAX_STR_LEN);
-            ptr += MAX_STR_LEN;
+            /* copy rdata[*] to buffer+mem_off */
+            hsize_t ii;
+            char *ptr = buffer+mem_off;
+            for (ii=0; ii<round_len; ii++) {
+                strncpy(ptr, rdata[ii], MAX_STR_LEN);
+                ptr += MAX_STR_LEN;
+            }
+
+            /* Close and release resources internally allocated by HDF5 for
+             * variable-length strings.
+             */
+            err = H5Dvlen_reclaim (dset.type_id, space_id, H5P_DEFAULT, rdata);
+            if (err < 0) HANDLE_ERROR("H5Dvlen_reclaim");
         }
+        else {
+            hsize_t ii;
+            hsize_t dims[2];
+            int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
 
-        /* Close and release resources internally allocated by HDF5 for
-         * variable-length strings.
-         */
-        err = H5Dvlen_reclaim (dset.type_id, space_id, H5P_DEFAULT, rdata);
-        if (err < 0) HANDLE_ERROR("H5Dvlen_reclaim");
+            rdata[0] = (char*) malloc(dims[0] * MAX_STR_LEN);
+            for (ii=1; ii<dims[0]; ii++) rdata[ii] = rdata[ii-1] + MAX_STR_LEN;
+
+            /* prepare reading the fixed-length dataset */
+            hid_t memtype = H5Tcopy(H5T_C_S1);
+            if (memtype < 0) HANDLE_ERROR("H5Tcopy");
+            err = H5Tset_size(memtype, dims[1]);
+            if (err < 0) HANDLE_ERROR("H5Tset_size");
+            err = H5Dread(dset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata[0]);
+            if (err < 0) HANDLE_ERROR("H5Dread "+dset.name);
+            err = H5Tclose(memtype);
+            if (err < 0) HANDLE_ERROR("H5Tclose");
+
+            /* copy rdata[*] to buffer+mem_off */
+            char *ptr = buffer+mem_off;
+            for (ii=0; ii<round_len; ii++) {
+                strncpy(ptr, rdata[ii], MAX_STR_LEN);
+                ptr += MAX_STR_LEN;
+            }
+            free(rdata[0]);
+        }
         free (rdata);
     }
     else {

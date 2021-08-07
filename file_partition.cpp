@@ -385,6 +385,7 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             hsize_t ii;
             hsize_t dims[2];
             int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
+            assert(ndims == 2);
 
             rdata[0] = (char*) malloc(dims[0] * MAX_STR_LEN);
             for (ii=1; ii<dims[0]; ii++) rdata[ii] = rdata[ii-1] + MAX_STR_LEN;

@@ -168,8 +168,8 @@ Command usage:
     [-h]            print this command usage message
     [-v]            verbose mode (default: off)
     [-r pattern]    groups matching pattern are not injected with key dataset
-    [-k indx_names] dataset names in group '/spill', separated by comma, to be
-                    used to generate partition keys (default: run,subrun,evt)
+    [-k indx_names] dataset names separated by comma, to be used to generate
+                    partition keys (default: /spill/run,/spill/subrun,/spill/evt)
     file_name       input/output HDF5 file name (required)
 
     This utility program adds a new dataset in each group of the input file.
@@ -178,19 +178,22 @@ Command usage:
     the argument 'indx_names' of command-line option '-k'. The partition key
     dataset is to be used for data partitioning purpose in parallel read
     operations of the HDF5 file. Its contents are generated based on those
-    index datasets in group '/spill', whose names are provided in the argument
-    of command-line option '-k'. The default is 'run,subrun,evt' if option '-k'
-    is not used. These datasets together provide a list of unique identifiers,
-    which can be used to generate an array integers stored in an increasing
-    order. An example is '-k run,subrun,cycle,evt'. The data partitioning
-    strategy for parallel reads is to assign the dataset elements with the same
-    4-tuple of (run, subrun, cycle, evt) to the same MPI process. Thus, the
-    partition key dataset, named 'evt.seq' in this example, created in each
-    group stores a list of unique IDs corresponding to the unique 4-tuples. The
-    values in dataset 'evt.seq' are consistent across all groups. Requirements
+    index datasets whose names are provided in the argument of command-line
+    option '-k'. The default is '/spill/run,/spill/subrun,/spill/evt' if option
+    '-k' is not used. These datasets together provide a unique identifiers,
+    which will be used to generate an array of integers to be stored in the
+    file in an increasing order. When reading the HDF5 file with such key in
+    parallel, the data partitioning strategy can assign the dataset elements
+    with the same 3-tuple of (run, subrun, evt) to the same MPI process. Thus,
+    the partition key dataset, named 'evt.seq' in this example, created in each
+    group stores a list of unique IDs corresponding to the unique 3-tuples. The
+    values in dataset 'evt.seq' are consistent across all groups. If the index
+    datasets are stored as a 2D array, for example '/event_table/event_id' whose
+    2nd dimension is of size 3 storing datasets run, subrun, and evt, then the
+    command-line option can be simply '-k /event_table/event_id'. Requirements
     for the input HDF5 file:
-      1. group '/spill' must contain datasets provided in option '-k'. If '-k'
-         option is not used, the default datasets 'run,subrun,evt' must exist.
+      1. the group must be the same in option '-k'. If '-k' option is not used,
+         the default datasets '/spill/run,/spill/subrun,/spill/evt' must exist.
       2. contains multiple groups at root level
       3. each group may contain multiple 2D datasets
       4. all datasets in the same group share the 1st dimension size
@@ -204,10 +207,11 @@ Command usage:
   ```
 Example run and output:
   ```
-  % ./add_key -k run,subrun,cycle,evt nd_data_165_files.h5
+  % ./add_key -k /spill/run,/spill/subrun,/spill/cycle,/spill/evt nd_data_165_files.h5
   Input file name                   = nd_data_165_files.h5
   number of groups in the file      = 999
   number of non-zero size groups    = 108
+  Partition index dataset group     = /spill
   Partition index dataset names     = run, subrun, cycle, evt
   Partition key dataset name        = evt.seq
     max length among all groups     = 1695404032
@@ -296,12 +300,12 @@ Example run and output:
 
 **check_seq_incr** is a utility program to be run in sequential. Given a NOvA
 HDF5 file that contains partition key datasets, it checks the contents of
-partition key datasets in all groups. It first checks the partition dataset in
-group '/spill', a 1D array of integers, whose values should start from 0 and
-increment by 1. The contents of partition key datasets in all other groups are
-only required to be in a monotonically nondecreasing order, i.e.  may not start
-from 0, may contain repeated values, and may not increment by 1. The name of
-partition dataset is a command-line parameter.
+partition key datasets in all groups. It first checks the partition dataset
+specified at the command-line option '-d', a 1D array of integers, whose values
+should start from 0 and increment by 1. The contents of partition key datasets
+in all other groups are only required to be in a monotonically nondecreasing
+order, i.e. may not start from 0, may contain repeated values, and may not
+increment by 1. The name of partition dataset is a command-line parameter.
 
 Command usage:
   ```
@@ -314,10 +318,10 @@ Command usage:
 
     This utility program checks the contents of dataset 'name' in each group of
     the input file for whether the values are in a monotonically nondecreasing
-    order. In particular, the partition dataset in group '/spill' is checked
-    for whether the values start from 0 and increment by 1. Datasets in all
-    other groups are checked only for a monotonically nondecreasing order.
-    Requirements for the input HDF5 file:
+    order. In particular, the partition dataset specified at command-line option
+    '-d' is checked for whether the values start from 0 and increment by 1.
+    The same datasets in all other groups are checked only for a monotonically
+    nondecreasing order. Requirements for the input HDF5 file:
       1. contains multiple groups at root level
       2. each group may contain multiple 2D datasets
       3. the 1st  dimension of all datasets in the same group share same size
@@ -327,7 +331,7 @@ Command usage:
 
 Example run:
   ```
-  % ./check_seq_incr -d evt.seq out.h5
+  % ./check_seq_incr -d /event_table/evt.seq out.h5
   All datasets pass the check
   ```
 

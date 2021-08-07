@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> /* strcmp(), strdup() */
+#include <libgen.h> /* dirname(), basename() */
 #include <unistd.h> /* getopt() */
 #include <assert.h> /* assert() */
 #include <regex.h>
@@ -196,6 +197,8 @@ herr_t add_seq(hid_t       fid,
 
     /* first index dataset */
     dset_name = index_levels[0].c_str();
+    if (verbose)
+        printf("%s: dataset %s/%s\n",__func__,grp_name,dset_name);
 
     /* check if dataset exists */
     src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
@@ -248,47 +251,83 @@ herr_t add_seq(hid_t       fid,
     /* number of index datasets */
     ndsets = index_levels.size();
 
-    /* allocate read buffer */
-    buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
-    buf_ptr = buf;
+    if (ndsets > 1) {
+        /* allocate read buffer */
+        buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
+        buf_ptr = buf;
 
-    /* read the entire first dataset to the buffer */
-    err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-    if (err < 0) CALLBACK_ERROR("H5Dread", dset_name);
-    if ((err = H5Dclose(dset))  < 0) CALLBACK_ERROR("H5Dclose", dset_name);
-
-    buf_ptr += dset_dims[0];
-
-    /* read remaining index datasets into buffer */
-    for (ii=1; ii<ndsets; ii++) {
-        dset_name = index_levels[ii].c_str();
-
-        /* check if dataset exists */
-        src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
-        if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
-        if (src_exist == 0) {
-            if (verbose)
-                printf("Warn: dataset '%s/%s' not exist, skip this group.\n",
-                       grp_name,dset_name);
-            free(buf);
-            goto fn_exit;
-        }
-
-        /* open dataset */
-        dset = H5Dopen(grp_id, dset_name, H5P_DEFAULT);
-        if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
-
-        /* read the entire dataset */
-        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                      buf_ptr);
-        if (err < 0) CALLBACK_ERROR("H5Dread", dset_name)
-
-        /* close the dataset */
-        if ((err = H5Dclose(dset)) < 0) CALLBACK_ERROR("H5Dclose", dset_name)
+        /* read the entire first dataset to the buffer */
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+        if (err < 0) CALLBACK_ERROR("H5Dread", dset_name);
+        if ((err = H5Dclose(dset))  < 0) CALLBACK_ERROR("H5Dclose", dset_name);
 
         buf_ptr += dset_dims[0];
-    }
 
+        /* read remaining index datasets into buffer */
+        for (ii=1; ii<ndsets; ii++) {
+            dset_name = index_levels[ii].c_str();
+
+            /* check if dataset exists */
+            src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
+            if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
+            if (src_exist == 0) {
+                if (verbose)
+                    printf("Warn: dataset '%s/%s' not exist, skip this group.\n",
+                           grp_name,dset_name);
+                free(buf);
+                goto fn_exit;
+            }
+
+            /* open dataset */
+            dset = H5Dopen(grp_id, dset_name, H5P_DEFAULT);
+            if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
+
+            /* read the entire dataset */
+            err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                          buf_ptr);
+            if (err < 0) CALLBACK_ERROR("H5Dread", dset_name)
+
+            /* close the dataset */
+            if ((err = H5Dclose(dset)) < 0) CALLBACK_ERROR("H5Dclose", dset_name)
+
+            buf_ptr += dset_dims[0];
+        }
+    }
+    else {
+        long long *tmp = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+        /* read the entire index dataset */
+        if (verbose) printf("Read index dataset %s\n", dset_name);
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp);
+        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+        if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
+
+        buf = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+        buf_ptr = buf;
+
+        /* read the remaining index datasets into buffer */
+        for (ii=0; ii<dset_dims[1]; ii++) {
+            for (jj=0; jj<dset_dims[0]; jj++)
+                buf_ptr[jj] = tmp[ii + jj * dset_dims[1]];
+
+            buf_ptr += dset_dims[0];
+        }
+        free(tmp);
+
+        err = H5Sclose(space_id);
+        if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
+        hsize_t maxdims[2] = {H5S_UNLIMITED, 1};
+        dset_dims[1] = 1;
+        space_id = H5Screate_simple(ndims, dset_dims, maxdims);
+        if (err < 0) CALLBACK_ERROR("H5Screate_simple", dset_name)
+
+        hsize_t chunk_dims[2];
+        chunk_dims[0] = 256 * 1024;
+        chunk_dims[1] = 1;
+        err = H5Pset_chunk(dcpl_id, 2, chunk_dims);
+        if (err < 0) CALLBACK_ERROR("H5Pset_chunk", dset_name)
+
+        ndsets = dset_dims[1];
+    }
     GET_TIMER(ts, te, timing[0])
 
     /* allocate buffer for partition key dataset, seq */
@@ -435,8 +474,8 @@ usage(char *progname)
   [-h]            print this command usage message\n\
   [-v]            verbose mode (default: off)\n\
   [-r pattern]    groups matching pattern are not injected with key dataset\n\
-  [-k indx_names] dataset names in group '/spill', separated by comma, to be\n\
-                  used to generate partition keys (default: run,subrun,evt)\n\
+  [-k indx_names] dataset names separated by comma, to be used to generate\n\
+                  partition keys (default: /spill/run,/spill/subrun,/spill/evt)\n\
   file_name       input/output HDF5 file name (required)\n\n\
   This utility program adds a new dataset in each group of the input file.\n\
   The new dataset, referred as the partition key dataset and to be named as\n\
@@ -444,19 +483,22 @@ usage(char *progname)
   the argument 'indx_names' of command-line option '-k'. The partition key\n\
   dataset is to be used for data partitioning purpose in parallel read\n\
   operations of the HDF5 file. Its contents are generated based on those\n\
-  index datasets in group '/spill', whose names are provided in the argument\n\
-  of command-line option '-k'. The default is 'run,subrun,evt' if option '-k'\n\
-  is not used. These datasets together provide a list of unique identifiers,\n\
-  which can be used to generate an array integers stored in an increasing\n\
-  order. An example is '-k run,subrun,cycle,evt'. The data partitioning\n\
-  strategy for parallel reads is to assign the dataset elements with the same\n\
-  4-tuple of (run, subrun, cycle, evt) to the same MPI process. Thus, the\n\
-  partition key dataset, named 'evt.seq' in this example, created in each\n\
-  group stores a list of unique IDs corresponding to the unique 4-tuples. The\n\
-  values in dataset 'evt.seq' are consistent across all groups. Requirements\n\
+  index datasets whose names are provided in the argument of command-line\n\
+  option '-k'. The default is '/spill/run,/spill/subrun,/spill/evt' if option\n\
+  '-k' is not used. These datasets together provide a unique identifiers,\n\
+  which will be used to generate an array of integers to be stored in the\n\
+  file in an increasing order. When reading the HDF5 file with such key in\n\
+  parallel, the data partitioning strategy can assign the dataset elements\n\
+  with the same 3-tuple of (run, subrun, evt) to the same MPI process. Thus,\n\
+  the partition key dataset, named 'evt.seq' in this example, created in each\n\
+  group stores a list of unique IDs corresponding to the unique 3-tuples. The\n\
+  values in dataset 'evt.seq' are consistent across all groups. If the index\n\
+  datasets are stored as a 2D array, for example '/event_table/event_id' whose\n\
+  2nd dimension is of size 3 storing datasets run, subrun, and evt, then the\n\
+  command-line option can be simply '-k /event_table/event_id'. Requirements\n\
   for the input HDF5 file:\n\
-    1. group '/spill' must contain datasets provided in option '-k'. If '-k'\n\
-       option is not used, the default datasets 'run,subrun,evt' must exist.\n\
+    1. the group must be the same in option '-k'. If '-k' option is not used,\n\
+       the default datasets '/spill/run,/spill/subrun,/spill/evt' must exist.\n\
     2. contains multiple groups at root level\n\
     3. each group may contain multiple 2D datasets\n\
     4. all datasets in the same group share the 1st dimension size\n\
@@ -476,8 +518,8 @@ int main(int argc, char **argv)
 {
     int c, err_exit=0, ndims;
     char *infile=NULL, dset_name[1024], part_key_base[1024];
-    char *token, *dset_list=NULL, *pattern=NULL;
-    size_t ii, num_orig_groups=0, num_nonzero_groups=0, ndsets;
+    char *token, *dset_list=NULL, *pattern=NULL, *grp_name=NULL, str_tmp[1024];
+    size_t ii, jj, num_orig_groups=0, num_nonzero_groups=0, ndsets;
     size_t max_seq=0, min_seq=0, avg_seq=0;
     long long *buf=NULL, *buf_ptr;
     double timing[6], stime[6];
@@ -538,7 +580,7 @@ int main(int argc, char **argv)
 
     /* construct index datasets into individual strings */
     if (dset_list == NULL) /* default datasets */
-        dset_list = strdup("run,subrun,evt");
+        dset_list = strdup("/spill/run,/spill/subrun,/spill/evt");
 
     /* tokenize dest_list */
     token = strtok(dset_list, ",");
@@ -546,8 +588,30 @@ int main(int argc, char **argv)
         index_levels.push_back(token);
         token = strtok(NULL, ",");
     }
+
+    /* number of index datasets */
+    ndsets = index_levels.size();
+    assert(ndsets > 0);
+    if (verbose) cout << "number of index datasets = " << ndsets << endl;
+
+    strcpy(str_tmp, index_levels[0].c_str());
+    grp_name = strdup(dirname(str_tmp));
+    /* strip the group name */
+    strcpy(str_tmp, index_levels[0].c_str());
+    index_levels[0].assign(basename(str_tmp));
+    for (ii=1; ii<ndsets; ii++) {
+        strcpy(str_tmp, index_levels[ii].c_str());
+        if (strcmp(grp_name, dirname(str_tmp))) {
+            printf("Error: group names are inconsistent\n");
+            exit(1);
+        }
+        /* strip the group name */
+        strcpy(str_tmp, index_levels[ii].c_str());
+        index_levels[ii].assign(basename(str_tmp));
+    }
+
     /* use the last dataset name, as base for key */
-    strcpy(part_key_base, index_levels.back().c_str());
+    strcpy(part_key_base, index_levels[ndsets-1].c_str());
 
     SET_TIMER(ts)
 
@@ -565,7 +629,7 @@ int main(int argc, char **argv)
 
     GET_TIMER(ts, te, timing[0])
 #if defined PROFILE && PROFILE
-    printf("Open input file                           = %7.2f sec\n",timing[0]);
+    printf("Open input file = %7.2f sec\n",timing[0]);
 #endif
 
     /* retrieve the number of groups */
@@ -588,65 +652,100 @@ int main(int argc, char **argv)
 
     GET_TIMER(ts, te, timing[1])
 #if defined PROFILE && PROFILE
-    printf("Collect group names                       = %7.2f sec\n",timing[1]);
+    printf("Collect group names = %7.2f sec\n",timing[1]);
 #endif
 
-    /* number of index datasets */
-    ndsets = index_levels.size();
-    assert(ndsets > 0);
-    if (verbose) cout << "number of index datasets = " << ndsets << endl;
-
-    /* open the first index dataset in group /spill to collect the 1st
-     * dimension size. Note all datasets in group /spill should have the same
-     * 1st dimension size.
-     */
-    sprintf(dset_name, "/spill/%s", index_levels[0].c_str());
-    dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
-    if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
-
-    /* collect dimension sizes */
-    space_id = H5Dget_space(dset);
-    if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name)
-    ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
-    if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name)
-    err = H5Sclose(space_id);
-    if (err < 0) RETURN_ERROR("H5Sclose", dset_name)
-
-    /* allocate buffers for all index datasets */
-    buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
-    buf_ptr = buf;
-
-    /* read the entire 1st index dataset */
-    if (verbose) printf("Read index dataset %s\n", dset_name);
-    err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-    if (err < 0) RETURN_ERROR("H5Dread", dset_name)
-    if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
-
-    buf_ptr += dset_dims[0];
-
-    /* read the remaining index datasets into buffer */
-    for (ii=1; ii<ndsets; ii++) {
-        sprintf(dset_name, "/spill/%s", index_levels[ii].c_str());
-        if (verbose) printf("Read index dataset %s\n", dset_name);
-
-        /* open index dataset */
+    if (ndsets > 1) {
+        /* open the first index dataset in group /spill to collect the 1st
+         * dimension size. Note all datasets in group /spill should have the same
+         * 1st dimension size.
+         */
+        sprintf(dset_name, "%s/%s", grp_name,index_levels[0].c_str());
         dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
         if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
 
-        /* read the entire dataset */
-        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                      buf_ptr);
-        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+        /* collect dimension sizes */
+        space_id = H5Dget_space(dset);
+        if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name)
+        ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
+        if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name)
+        err = H5Sclose(space_id);
+        if (err < 0) RETURN_ERROR("H5Sclose", dset_name)
 
-        /* close dataset */
-        if ((err = H5Dclose(dset))  < 0) RETURN_ERROR("H5Dclose", dset_name)
+        /* allocate buffers for all index datasets */
+        buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
+        buf_ptr = buf;
+
+        /* read the entire 1st index dataset */
+        if (verbose) printf("Read index dataset %s\n", dset_name);
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+        if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
 
         buf_ptr += dset_dims[0];
+
+        /* read the remaining index datasets into buffer */
+        for (ii=1; ii<ndsets; ii++) {
+            sprintf(dset_name, "%s/%s", grp_name,index_levels[ii].c_str());
+            if (verbose) printf("Read index dataset %s\n", dset_name);
+
+            /* open index dataset */
+            dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
+            if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
+
+            /* read the entire dataset */
+            err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
+                          buf_ptr);
+            if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+
+            /* close dataset */
+            if ((err = H5Dclose(dset))  < 0) RETURN_ERROR("H5Dclose", dset_name)
+
+            buf_ptr += dset_dims[0];
+        }
+    }
+    else { /* the index datasets are stored together in a 2D array */
+        long long *tmp;
+
+	/* open the dataset to collect the 1st dimension size. */
+        sprintf(dset_name, "%s/%s", grp_name, index_levels[0].c_str());
+        dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
+        if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
+
+        /* collect dimension sizes */
+        space_id = H5Dget_space(dset);
+        if (space_id < 0) RETURN_ERROR("H5Dget_space", dset_name)
+        ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
+        if (ndims < 0) RETURN_ERROR("H5Sget_simple_extent_dims", dset_name)
+        err = H5Sclose(space_id);
+        if (err < 0) RETURN_ERROR("H5Sclose", dset_name)
+
+        tmp = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+
+        /* read the entire index dataset */
+        if (verbose) printf("Read index dataset %s\n", dset_name);
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp);
+        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+        if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
+
+        buf = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+        buf_ptr = buf;
+
+        /* read the remaining index datasets into buffer */
+        for (ii=0; ii<dset_dims[1]; ii++) {
+            for (jj=0; jj<dset_dims[0]; jj++)
+                buf_ptr[jj] = tmp[ii + jj * dset_dims[1]];
+
+            buf_ptr += dset_dims[0];
+        }
+        free(tmp);
+
+        ndsets = dset_dims[1];
     }
 
     GET_TIMER(ts, te, timing[2])
 #if defined PROFILE && PROFILE
-    printf("Read partition index datasets in '/spill' = %7.2f sec\n",timing[2]);
+    printf("Read partition index datasets in group '%s' = %7.2f sec\n",grp_name,timing[2]);
 #endif
 
     /* build a lookup table based on the index datasets */
@@ -656,7 +755,7 @@ int main(int argc, char **argv)
 
     GET_TIMER(ts, te, timing[3])
 #if defined PROFILE && PROFILE
-    printf("Construct lookup table                    = %7.2f sec\n",timing[3]);
+    printf("Construct lookup table = %7.2f sec\n",timing[3]);
 #endif
 
     /* Iterate all groups and create a new key dataset in each group */
@@ -697,8 +796,9 @@ fn_exit:
         printf("Input file name                   = %s\n", infile);
         printf("number of groups in the file      = %zd\n", num_orig_groups);
         printf("number of non-zero size groups    = %zd\n", num_nonzero_groups);
+        printf("Partition index dataset group     = %s\n",grp_name);
         printf("Partition index dataset names     = %s",index_levels[0].c_str());
-        for (ii=1; ii<ndsets; ii++)
+        for (ii=1; ii<index_levels.size(); ii++)
             printf(", %s", index_levels[ii].c_str());
         printf("\n");
         printf("Partition key dataset name        = %s.seq\n",part_key_base);
@@ -723,6 +823,7 @@ fn_exit:
     }
 #endif
     if (infile != NULL) free(infile);
+    if (grp_name != NULL) free(grp_name);
 
     return (err_exit != 0);
 }

@@ -218,6 +218,14 @@ int main(int argc, char **argv)
     err = H5Sclose(space_id);
     if (err < 0) HANDLE_ERROR("H5Sclose",dname)
 
+    if (dset_dims[1] > 1) {
+        printf("Error at line %d: H5Fopen %s\n",__LINE__,infile);
+        printf("\tkey dataset %s 2nd dimension is expected of size 1 but got %llu\n",
+               dname, dset_dims[1]);
+        err_exit = -1;
+        goto fn_exit;
+    }
+
     if (verbose) printf("Checking dataset %s\n",dname);
 
     /* allocate read buffer */

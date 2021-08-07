@@ -177,7 +177,6 @@ herr_t add_seq(hid_t       fid,
     char key_name[1024];
     int ndims;
     size_t ii, jj, ndsets;
-    long long *buf=NULL, *buf_ptr;
     int64_t *seq_buf=NULL;
     herr_t err;
     hid_t grp_id=-1, dset, dcpl_id=-1, space_id=-1, seq_id;
@@ -251,7 +250,12 @@ herr_t add_seq(hid_t       fid,
     /* number of index datasets */
     ndsets = index_levels.size();
 
+    /* allocate buffer for partition key dataset, seq */
+    seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
+
     if (ndsets > 1) {
+        long long *buf=NULL, *buf_ptr;
+
         /* allocate read buffer */
         buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
         buf_ptr = buf;
@@ -292,26 +296,39 @@ herr_t add_seq(hid_t       fid,
 
             buf_ptr += dset_dims[0];
         }
+        GET_TIMER(ts, te, timing[0])
+
+        /* table look up the seq values */
+        for (ii=0; ii<dset_dims[0]; ii++) {
+            keyv key(ndsets);
+            for (jj=0; jj<ndsets; jj++)
+                key[jj] = buf[dset_dims[0]*jj + ii];
+            seq_buf[ii] = lookup_table[key];
+        }
     }
     else {
-        long long *tmp = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+        long long **buf;
+        buf = (long long**) malloc(dset_dims[0] * sizeof(long long*));
+        buf[0] = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
+        for (ii=1; ii<dset_dims[0]; ii++) buf[ii] = buf[ii-1] + dset_dims[1];
+
         /* read the entire index dataset */
         if (verbose) printf("Read index dataset %s\n", dset_name);
-        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp);
+        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf[0]);
         if (err < 0) RETURN_ERROR("H5Dread", dset_name)
         if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
 
-        buf = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
-        buf_ptr = buf;
+        GET_TIMER(ts, te, timing[0])
 
-        /* read the remaining index datasets into buffer */
-        for (ii=0; ii<dset_dims[1]; ii++) {
-            for (jj=0; jj<dset_dims[0]; jj++)
-                buf_ptr[jj] = tmp[ii + jj * dset_dims[1]];
-
-            buf_ptr += dset_dims[0];
+        /* table look up the seq values */
+        for (ii=0; ii<dset_dims[0]; ii++) {
+            keyv key(dset_dims[1]);
+            for (jj=0; jj<dset_dims[1]; jj++)
+                key[jj] = buf[ii][jj];
+            seq_buf[ii] = lookup_table[key];
         }
-        free(tmp);
+        free(buf[0]);
+        free(buf);
 
         err = H5Sclose(space_id);
         if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
@@ -325,23 +342,7 @@ herr_t add_seq(hid_t       fid,
         chunk_dims[1] = 1;
         err = H5Pset_chunk(dcpl_id, 2, chunk_dims);
         if (err < 0) CALLBACK_ERROR("H5Pset_chunk", dset_name)
-
-        ndsets = dset_dims[1];
     }
-    GET_TIMER(ts, te, timing[0])
-
-    /* allocate buffer for partition key dataset, seq */
-    seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
-
-    /* table look up the seq values */
-    for (ii=0; ii<dset_dims[0]; ii++) {
-        keyv key(ndsets);
-        for (jj=0; jj<ndsets; jj++)
-            key[jj] = buf[dset_dims[0]*jj + ii];
-        seq_buf[ii] = lookup_table[key];
-    }
-
-    free(buf);
 
     GET_TIMER(ts, te, timing[1])
 
@@ -731,7 +732,7 @@ int main(int argc, char **argv)
         buf = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
         buf_ptr = buf;
 
-        /* read the remaining index datasets into buffer */
+        /* copy into contiguous space */
         for (ii=0; ii<dset_dims[1]; ii++) {
             for (jj=0; jj<dset_dims[0]; jj++)
                 buf_ptr[jj] = tmp[ii + jj * dset_dims[1]];

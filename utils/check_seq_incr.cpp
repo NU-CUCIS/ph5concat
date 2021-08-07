@@ -46,7 +46,7 @@ herr_t check_order(hid_t             loc_id,/* object ID */
                    const H5O_info_t *info,  /* object metadata */
                    void             *op)    /* data passed from caller */
 {
-    char *path=NULL, *dset_name, *grp_name;
+    char *path=NULL, *dset_name, *grp_name, *base_grp, *dname;
     herr_t err=0;
     hid_t dset_id, space_id;
     hsize_t dset_dims[2];
@@ -65,10 +65,13 @@ herr_t check_order(hid_t             loc_id,/* object ID */
     dset_name = basename(path);
     grp_name = dirname(path);
 
-    if (strcmp(grp_name, "/spill") == 0)
+    base_grp = dirname(it_op->dname);
+    dname    = basename(it_op->dname);
+
+    if (strcmp(grp_name, base_grp) == 0)
         goto fn_exit; /* check for /spill has been done in main() */
 
-    if (strcmp(dset_name, it_op->dname) != 0)
+    if (strcmp(dset_name, dname) != 0)
         goto fn_exit; /* skip dataset that is not dname */
 
     /* Open the dataset. Note that loc_id is not the dataset/group ID. */
@@ -141,14 +144,14 @@ usage(char *progname)
 #define USAGE   "\
   [-h]       print this command usage message\n\
   [-v]       verbose mode (default: off)\n\
-  [-d name]  partition key dataset name (default: 'evt.seq')\n\
+  [-d name]  partition key dataset name (default: '/spill/evt.seq')\n\
   infile     name of input HDF5 file (required)\n\n\
   This utility program checks the contents of dataset 'name' in each group of\n\
   the input file for whether the values are in a monotonically nondecreasing\n\
-  order. In particular, the partition dataset in group '/spill' is checked\n\
-  for whether the values start from 0 and increment by 1. Datasets in all\n\
-  other groups are checked only for a monotonically nondecreasing order.\n\
-  Requirements for the input HDF5 file:\n\
+  order. In particular, the partition dataset specified at command-line option\n\
+  '-d' is checked for whether the values start from 0 and increment by 1.\n\
+  The same datasets in all other groups are checked only for a monotonically\n\
+  nondecreasing order. Requirements for the input HDF5 file:\n\
     1. contains multiple groups at root level\n\
     2. each group may contain multiple 2D datasets\n\
     3. the 1st  dimension of all datasets in the same group share same size\n\
@@ -162,7 +165,7 @@ usage(char *progname)
 int main(int argc, char **argv)
 {
     int c, err_exit=0, ndims;
-    char dset_name[1024], *infile=NULL, *dname=NULL;
+    char *infile=NULL, *dname=NULL;
     herr_t err;
     hid_t file_id=-1, dset_id, space_id;
     hsize_t i, dset_dims[2];
@@ -192,7 +195,7 @@ int main(int argc, char **argv)
     infile = strdup(argv[optind]);
     if (verbose) printf("input list file: %s\n", infile);
 
-    if (dname == NULL) dname = strdup("evt.seq");
+    if (dname == NULL) dname = strdup("/spill/evt.seq");
     if (verbose) printf("dataset name: %s\n", dname);
 
     /* open file in read-only mode  */
@@ -203,41 +206,40 @@ int main(int argc, char **argv)
         goto fn_exit;
     }
 
-    /* Open the dataset in group /spill */
-    sprintf(dset_name, "/spill/%s", dname);
-    dset_id = H5Dopen(file_id, dset_name, H5P_DEFAULT);
-    if (dset_id < 0) HANDLE_ERROR("H5Dopen",dset_name)
+    /* Open the dataset */
+    dset_id = H5Dopen(file_id, dname, H5P_DEFAULT);
+    if (dset_id < 0) HANDLE_ERROR("H5Dopen",dname)
 
     /* Get dimension sizes */
     space_id = H5Dget_space(dset_id);
-    if (space_id < 0) HANDLE_ERROR("H5Dget_space",dset_name)
+    if (space_id < 0) HANDLE_ERROR("H5Dget_space",dname)
     ndims = H5Sget_simple_extent_dims(space_id, dset_dims, NULL);
-    if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims",dset_name)
+    if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims",dname)
     err = H5Sclose(space_id);
-    if (err < 0) HANDLE_ERROR("H5Sclose",dset_name)
+    if (err < 0) HANDLE_ERROR("H5Sclose",dname)
 
-    if (verbose) printf("Checking dataset %s\n",dset_name);
+    if (verbose) printf("Checking dataset %s\n",dname);
 
     /* allocate read buffer */
     buf = new unsigned int [dset_dims[0]];
 
     /* read the entire dataset */
     err = H5Dread(dset_id, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-    if (err < 0) HANDLE_ERROR("H5Dread",dset_name)
+    if (err < 0) HANDLE_ERROR("H5Dread",dname)
     err = H5Dclose(dset_id);
-    if (err < 0) HANDLE_ERROR("H5Dclose",dset_name)
+    if (err < 0) HANDLE_ERROR("H5Dclose",dname)
 
     /* check if starts with 0 */
     if (buf[0] != 0) {
-        printf("Error: /spill/%s[0] expects 0 but got %u\n",dset_name,buf[0]);
+        printf("Error: %s[0] expects 0 but got %u\n",dname,buf[0]);
         err_exit = -1;
         goto fn_exit;
     }
     /* check if increments by 1 */
     for (i=1; i<dset_dims[0]; i++) {
         if (buf[i] != i) {
-            printf("Error: /spill/%s[%lld] expects %lld but got %u\n",
-                   dset_name,i,i,buf[i]);
+            printf("Error: %s[%lld] expects %lld but got %u\n",
+                   dname,i,i,buf[i]);
             err_exit = -1;
             goto fn_exit;
         }

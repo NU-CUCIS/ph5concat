@@ -170,6 +170,9 @@ Command usage:
     [-r pattern]    groups matching pattern are not injected with key dataset
     [-k indx_names] dataset names separated by comma, to be used to generate
                     partition keys (default: /spill/run,/spill/subrun,/spill/evt)
+    [-c]            create sequence-count datasets as partition keys, instead
+                    of sequence-only datasets. The suffix of the key datasets
+                    will be `seq_cnt`. (default: off)
     file_name       input/output HDF5 file name (required)
 
     This utility program adds a new dataset in each group of the input file.
@@ -188,10 +191,14 @@ Command usage:
     the partition key dataset, named 'evt.seq' in this example, created in each
     group stores a list of unique IDs corresponding to the unique 3-tuples. The
     values in dataset 'evt.seq' are consistent across all groups. If the index
-    datasets are stored as a 2D array, for example '/event_table/event_id' whose
-    2nd dimension is of size 3 storing datasets run, subrun, and evt, then the
-    command-line option can be simply '-k /event_table/event_id'. Requirements
-    for the input HDF5 file:
+    datasets are stored as a 2D array, for example '/event_table/event_id'
+    whose 2nd dimension is of size 3 storing datasets run, subrun, and evt,
+    then the command-line option can be simply '-k /event_table/event_id'.
+    When option '-c' is used, the partition key datasets will be created as 2D
+    N x 2 arrays, where N is the number of unique partition key values and the
+    two elements in each row are the key value and the count of its repeat in
+    the index datasets. This option is expected to create the key datasets of
+    much smaller sizes.  Requirements for the input HDF5 file:
       1. the group must be the same in option '-k'. If '-k' option is not used,
          the default datasets '/spill/run,/spill/subrun,/spill/evt' must exist.
       2. contains multiple groups at root level

@@ -167,7 +167,8 @@ herr_t add_seq(hid_t       fid,
                const char *grp_name,
                const char *part_key_base,
                table       lookup_table,
-               int         use_seq_cnt,
+               int         create_seq,
+               int         create_seq_cnt,
                size_t     *num_nonzero_groups,
                size_t     *max_len,    /* max seq size */
                size_t     *min_len,    /* min seq size */
@@ -348,7 +349,7 @@ herr_t add_seq(hid_t       fid,
     GET_TIMER(ts, te, timing[1])
 
 seq_create:
-    if (!use_seq_cnt) {
+    if (create_seq) {
         sprintf(key_name, "%s.seq", part_key_base);
 
         /* create the new partition key dataset */
@@ -367,7 +368,7 @@ seq_create:
         err = H5Dclose(seq_id);
         if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
     }
-    else {
+    if (create_seq_cnt) {
         /* create the new partition key sequence-count dataset */
         nkeys = 1;
         prev_key = seq_buf[0];
@@ -540,6 +541,8 @@ usage(char *progname)
   [-c]            create sequence-count datasets as partition keys, instead\n\
                   of sequence-only datasets. The suffix of the key datasets\n\
                   will be `seq_cnt`. (default: off)\n\
+  [-a]            create both sequence and sequence-count datasets.\n\
+                  (default: off)\n\
   file_name       input/output HDF5 file name (required)\n\n\
   This utility program adds a new dataset in each group of the input file.\n\
   The new dataset, referred as the partition key dataset and to be named as\n\
@@ -584,7 +587,7 @@ usage(char *progname)
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    int c, err_exit=0, ndims, use_seq_cnt=0;
+    int c, err_exit=0, ndims, create_seq=1, create_seq_cnt=0;
     char *infile=NULL, dset_name[1024], part_key_base[1024];
     char *token, *dset_list=NULL, *pattern=NULL, *grp_name=NULL, str_tmp[1024];
     size_t ii, jj, num_orig_groups=0, num_nonzero_groups=0, ndsets;
@@ -612,7 +615,7 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvcr:k:")) != -1)
+    while ((c = getopt(argc, argv, "hvacr:k:")) != -1)
         switch(c) {
             case 'v': verbose = 1;
                       break;
@@ -620,7 +623,11 @@ int main(int argc, char **argv)
                       break;
             case 'r': pattern = strdup(optarg);
                       break;
-            case 'c': use_seq_cnt = 1;
+            case 'c': create_seq_cnt = 1;
+                      create_seq = 0;
+                      break;
+            case 'a': create_seq_cnt = 1;
+                      create_seq = 1;
                       break;
             case 'h': usage(argv[0]);
                       return 0;
@@ -831,8 +838,8 @@ int main(int argc, char **argv)
     /* Iterate all groups and create a new key dataset in each group */
     for (ii=0; ii<it_op.num_groups; ii++) {
         err = add_seq(fid, index_levels, it_op.grp_names[ii], part_key_base,
-                      lookup_table, use_seq_cnt, &num_nonzero_groups, &max_seq,
-                      &min_seq, &avg_seq, stime);
+                      lookup_table, create_seq, create_seq_cnt,
+                      &num_nonzero_groups, &max_seq, &min_seq, &avg_seq, stime);
         if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[ii])
     }
     if (num_nonzero_groups > 0)

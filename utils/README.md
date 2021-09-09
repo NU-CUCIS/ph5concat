@@ -173,6 +173,8 @@ Command usage:
     [-c]            create sequence-count datasets as partition keys, instead
                     of sequence-only datasets. The suffix of the key datasets
                     will be `seq_cnt`. (default: off)
+    [-a]            create both sequence and sequence-count datasets.
+                    (default: off)
     file_name       input/output HDF5 file name (required)
 
     This utility program adds a new dataset in each group of the input file.

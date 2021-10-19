@@ -88,6 +88,7 @@ int get_memory_usage_kb(long* vmrss_kb, long* vmsize_kb)
         } \
     }
 #else
+    #define GET_MEM(vmrss, vmsize)
     #define SET_TIMER(ts)
     #define GET_TIMER(ts, t)
     #define PRN_TIMER(t, msg) { \

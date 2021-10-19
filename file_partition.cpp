@@ -225,7 +225,7 @@ int Concatenator::concat_datasets(bool process_large_dsets)
                     err = read_dataset2(dset, kk, in_dset_nrows,
                                         offset_in_dset, rows_to_read,
                                         nrows_written * row_size);
-                    if (err < 0) HANDLE_ERROR("read_dataset2")
+                    if (err < 0) HANDLE_ERROR("read_dataset2 /"+groups[ii].name+"/"+dset.name)
 
                     /* Update the offsets. */
                     nrows_written += rows_to_read;
@@ -413,7 +413,7 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
     else {
         err = H5Dread(dset_id, dset.type_id, memspace_id, space_id, H5P_DEFAULT,
                       buffer+mem_off);
-        if (err < 0) HANDLE_ERROR("H5Dread")
+        if (err < 0) HANDLE_ERROR("H5Dread "+dset.name)
     }
 
 fn_exit:

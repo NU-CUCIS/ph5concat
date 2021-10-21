@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 #include <tuple>
+#include <bits/stdc++.h>
 using namespace std;
 
 #include <hdf5.h>
@@ -176,15 +177,18 @@ herr_t add_seq(hid_t       fid,
                double     *timing)
 {
     const char *dset_name;
-    char key_name[1024];
-    int ndims, nkeys;
-    size_t ii, jj, ndsets;
-    int64_t *seq_buf=NULL, *seq_cnt=NULL, prev_key;
+    char seq_name[1024], seq_cnt_name[1024];
+    int ndims;
+    size_t ii, jj, ndsets, chunk_size;
+    int64_t *seq_buf;
     herr_t err;
-    hid_t grp_id=-1, dset, dcpl_id=-1, space_id=-1, seq_id;
-    hsize_t dset_dims[2], maxdims[2];
+    hid_t grp_id=-1, dset, memspace, seq_id, seq_cnt_id;
+    hid_t dcpl_id, in_fspace=-1, out_fspace;
+    hsize_t dset_dims[2], maxdims[2], chunk_dims[2];
+    hsize_t start[2], count[2], ones[2]={1,1};
     htri_t src_exist;
     string dset_basename;
+    map<int64_t, int64_t> mp;
 
 #if defined PROFILE && PROFILE
     double ts=0.0, te=0.0;
@@ -196,12 +200,12 @@ herr_t add_seq(hid_t       fid,
     grp_id = H5Gopen(fid, grp_name, H5P_DEFAULT);
     if (grp_id < 0) RETURN_ERROR("H5Gopen", grp_name)
 
-    /* first index dataset */
+    /* first index dataset, for example 'run' in tuple (run, subrun, evt) */
     dset_name = index_levels[0].c_str();
     if (verbose)
         printf("%s: dataset %s/%s\n",__func__,grp_name,dset_name);
 
-    /* check if dataset exists */
+    /* check if the first index dataset exists */
     src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
     if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
     if (src_exist == 0) {
@@ -216,17 +220,10 @@ herr_t add_seq(hid_t       fid,
     if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
 
     /* Note size of dimension 0 of all datasets in a group should be the same */
-    space_id = H5Dget_space(dset);
-    if (space_id < 0) CALLBACK_ERROR("H5Dget_space", dset_name)
-    ndims = H5Sget_simple_extent_dims(space_id, dset_dims, maxdims);
+    in_fspace = H5Dget_space(dset);
+    if (in_fspace < 0) CALLBACK_ERROR("H5Dget_space", dset_name)
+    ndims = H5Sget_simple_extent_dims(in_fspace, dset_dims, maxdims);
     if (ndims != 2) CALLBACK_ERROR("H5Sget_simple_extent_dims", dset_name)
-
-    /* retrieve create property when the index dataset was created. The new
-     * partition key dataset will inherit the properties, such as dimensions,
-     * chunking, etc.
-     */
-    dcpl_id = H5Dget_create_plist(dset);
-    if (dcpl_id < 0) CALLBACK_ERROR("H5Dget_create_plist", dset_name)
 
     /* if the dataset is zero-sized, just create dataset */
     if (dset_dims[0] == 0) {
@@ -238,6 +235,7 @@ herr_t add_seq(hid_t       fid,
     /* non-zero size group */
     (*num_nonzero_groups)++;
 
+    /* collect statistics about the dataset sizes across groups */
     if (*num_nonzero_groups == 1) {
         *max_len = dset_dims[0];
         *min_len = dset_dims[0];
@@ -249,198 +247,276 @@ herr_t add_seq(hid_t       fid,
         *avg_len += dset_dims[0];
     }
 
-    /* number of index datasets */
+    /* number of index datasets, for example 3 in tuple (run, subrun, evt) */
     ndsets = index_levels.size();
 
-    /* allocate buffer for partition key dataset, seq */
-    seq_buf = (int64_t*) malloc(dset_dims[0] * sizeof(int64_t));
+seq_create:
+    /* dataset create property */
+    dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
+    if (dcpl_id < 0) CALLBACK_ERROR("H5Pcreate", seq_name)
+
+    /* Never fill in the chunk in advance. */
+    err = H5Pset_fill_time(dcpl_id, H5D_FILL_TIME_NEVER);
+    if (err < 0) CALLBACK_ERROR("H5Pset_fill_time", seq_name)
+
+    /* setting H5D_ALLOC_TIME_LATE takes no effect for parallel I/O on
+     * compressed datasets, which HDF5 always uses H5D_ALLOC_TIME_EARLY.
+     */
+    err = H5Pset_alloc_time(dcpl_id, H5D_ALLOC_TIME_LATE);
+    if (err < 0) CALLBACK_ERROR("H5Pset_alloc_time", seq_name)
+
+    /* set the chunk size to 256K x 1 elements */
+    chunk_dims[0] = 256 * 1024;
+    chunk_dims[1] = 1;
+    err = H5Pset_chunk(dcpl_id, 2, chunk_dims);
+    if (err < 0) CALLBACK_ERROR("H5Pset_chunk", seq_name)
+
+    if (create_seq) {
+        /* seq dataset will be of the same dimension lengths */
+        hsize_t maxdims[2] = {H5S_UNLIMITED, 1};
+        hsize_t seq_dims[2] = {dset_dims[0], 1};
+        out_fspace = H5Screate_simple(ndims, seq_dims, maxdims);
+        if (err < 0) CALLBACK_ERROR("H5Screate_simple", seq_name)
+
+        /* create the new partition key dataset */
+        sprintf(seq_name, "%s.seq", part_key_base);
+        seq_id = H5Dcreate2(grp_id, seq_name, H5T_STD_I64LE, out_fspace,
+                            H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", seq_name)
+    }
+
+    /* skip reading/writeing if zero-size dataset */
+    if (dset_dims[0] == 0) {
+        if (create_seq_cnt) goto seq_cnt_create;
+        goto fn_exit;
+    }
+
+#define READ_CHUNK (8 * 1024 * 1024)
+
+    /* set the read and write buffer chunk size */
+    chunk_size = MIN(READ_CHUNK, dset_dims[0]);
+    if (verbose) printf("Read chunk size = %zd\n",chunk_size);
+
+    /* allocate write buffer for partition key dataset, seq */
+    seq_buf = (int64_t*) malloc(chunk_size * sizeof(int64_t));
 
     if (ndsets > 1) {
-        long long *buf=NULL, *buf_ptr;
+        /* index datasets are stored as separate datasets, e.g. run, subrun,
+         * and evt.
+         */
+        long long *index_buf=NULL, *index_buf_ptr;
+        size_t remain=dset_dims[0];
+        hsize_t off=0;
+        hid_t *dset_ids;
 
-        /* allocate read buffer */
-        buf = (long long*) malloc(dset_dims[0] * ndsets * sizeof(long long));
-        buf_ptr = buf;
+        /* array storing dataset IDs */
+        dset_ids = (hid_t*) malloc(ndsets * sizeof(hid_t));
+        dset_ids[0] = dset;
 
-        /* read the entire first dataset to the buffer */
-        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
-        if (err < 0) CALLBACK_ERROR("H5Dread", dset_name);
-        if ((err = H5Dclose(dset))  < 0) CALLBACK_ERROR("H5Dclose", dset_name);
-
-        buf_ptr += dset_dims[0];
-
-        /* read remaining index datasets into buffer */
+        /* open remaining index datasets, the 1st one has been opened earlier */
         for (ii=1; ii<ndsets; ii++) {
-            dset_name = index_levels[ii].c_str();
-
             /* check if dataset exists */
-            src_exist = H5Lexists(grp_id, dset_name, H5P_DEFAULT);
-            if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+dset_name)
+            src_exist = H5Lexists(grp_id, index_levels[ii].c_str(), H5P_DEFAULT);
+            if (src_exist < 0) RETURN_ERROR("H5Lexists", string(grp_name)+index_levels[ii])
             if (src_exist == 0) {
                 if (verbose)
                     printf("Warn: dataset '%s/%s' not exist, skip this group.\n",
-                           grp_name,dset_name);
-                free(buf);
+                           grp_name,index_levels[ii].c_str());
                 goto fn_exit;
             }
 
             /* open dataset */
-            dset = H5Dopen(grp_id, dset_name, H5P_DEFAULT);
-            if (dset < 0) CALLBACK_ERROR("H5Dopen", dset_name)
-
-            /* read the entire dataset */
-            err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT,
-                          buf_ptr);
-            if (err < 0) CALLBACK_ERROR("H5Dread", dset_name)
-
-            /* close the dataset */
-            if ((err = H5Dclose(dset)) < 0) CALLBACK_ERROR("H5Dclose", dset_name)
-
-            buf_ptr += dset_dims[0];
+            dset_ids[ii] = H5Dopen(grp_id, index_levels[ii].c_str(), H5P_DEFAULT);
+            if (dset < 0) CALLBACK_ERROR("H5Dopen", index_levels[ii])
         }
-        GET_TIMER(ts, te, timing[0])
 
-        /* table look up the seq values */
-        for (ii=0; ii<dset_dims[0]; ii++) {
-            keyv key(ndsets);
-            for (jj=0; jj<ndsets; jj++)
-                key[jj] = buf[dset_dims[0]*jj + ii];
-            seq_buf[ii] = lookup_table[key];
+        /* allocate read buffer */
+        index_buf = (long long*) malloc(chunk_size * ndsets * sizeof(long long));
+
+        /* loop over the index datasets until all data has been read */
+        while (remain > 0) {
+            /* set file space for the read chunk */
+            start[0] = off;
+            start[1] = 0;
+            count[0] = MIN(chunk_size, remain);
+            count[1] = 1;
+            err = H5Sselect_hyperslab(in_fspace, H5S_SELECT_SET, start, NULL, ones, count);
+            if (err < 0) CALLBACK_ERROR("H5Sselect_hyperslab", seq_name)
+
+            /* set memory space, a contiguous buffer in memory */
+            memspace = H5Screate_simple(1, count, NULL);
+
+            /* read a chunk from each index datasets */
+            index_buf_ptr = index_buf;
+            for (ii=0; ii<ndsets; ii++) {
+                /* read next chunk of the dataset */
+                err = H5Dread(dset_ids[ii], H5T_NATIVE_LLONG, memspace, in_fspace, H5P_DEFAULT,
+                              index_buf_ptr);
+                if (err < 0) CALLBACK_ERROR("H5Dread", index_levels[ii])
+
+                index_buf_ptr += count[0];
+            }
+            GET_TIMER(ts, te, timing[0])
+
+            /* table look up the seq values */
+            for (ii=0; ii<count[0]; ii++) {
+                keyv key(ndsets);
+                for (jj=0; jj<ndsets; jj++)
+                    key[jj] = index_buf[count[0]*jj + ii];
+                seq_buf[ii] = lookup_table[key];
+                mp[seq_buf[ii]]++;
+            }
+            GET_TIMER(ts, te, timing[1])
+
+            if (create_seq) {
+                /* write a chunk to seq dataset */
+                err = H5Sselect_hyperslab(out_fspace, H5S_SELECT_SET, start, NULL, ones, count);
+                if (err < 0) CALLBACK_ERROR("H5Sselect_hyperslab", seq_name)
+
+                err = H5Dwrite(seq_id, H5T_STD_I64LE, memspace, out_fspace, H5P_DEFAULT, seq_buf);
+                if (err < 0) CALLBACK_ERROR("H5Dwrite", seq_name)
+            }
+            off    += count[0];
+            remain -= count[0];
+            GET_TIMER(ts, te, timing[2])
         }
+        free(index_buf);
+
+        /* close the index dataset */
+        for (ii=0; ii<ndsets; ii++) {
+            if ((err = H5Dclose(dset_ids[ii])) < 0)
+                CALLBACK_ERROR("H5Dclose", index_levels[ii].c_str());
+        }
+        free(dset_ids);
     }
     else {
-        long long **buf;
-        buf = (long long**) malloc(dset_dims[0] * sizeof(long long*));
-        buf[0] = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
-        for (ii=1; ii<dset_dims[0]; ii++) buf[ii] = buf[ii-1] + dset_dims[1];
+        /* index datasets are stored as a single dataset, for example
+         * dataset /event_table/event_id which is a 2D array whose 2nd
+         * dimension is 3, each row representing a tuple (run, subrun, evt)
+         */
+        long long **index_buf;
+        size_t remain=dset_dims[0];
+        hsize_t off=0, memlen;
 
-        /* read the entire index dataset */
-        if (verbose) printf("Read index dataset %s\n", dset_name);
-        err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf[0]);
-        if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+        /* allocate read buffer */
+        index_buf = (long long**) malloc(chunk_size * sizeof(long long*));
+        index_buf[0] = (long long*) malloc(chunk_size * dset_dims[1] * sizeof(long long));
+        for (ii=1; ii<chunk_size; ii++) index_buf[ii] = index_buf[ii-1] + dset_dims[1];
+
+        if (verbose) {
+            printf("Read index dataset /%s/%s\n",grp_name,dset_name);
+            printf("     index dataset of shape %llu x %llu\n",dset_dims[0], dset_dims[1]);
+        }
+
+        /* loop over the index dataset until all data has been read */
+        while (remain > 0) {
+            /* set file space for the read chunk */
+            start[0] = off;
+            start[1] = 0;
+            count[0] = MIN(chunk_size, remain);
+            count[1] = dset_dims[1];
+            err = H5Sselect_hyperslab(in_fspace, H5S_SELECT_SET, start, NULL, ones, count);
+
+            /* set memory space, a contiguous buffer in memory */
+            memlen = count[0] * count[1];
+            memspace = H5Screate_simple(1, &memlen, NULL);
+
+            /* read a chunk from each index datasets */
+            err = H5Dread(dset, H5T_NATIVE_LLONG, memspace, in_fspace, H5P_DEFAULT, index_buf[0]);
+            if (err < 0) RETURN_ERROR("H5Dread", dset_name)
+            err = H5Sclose(memspace);
+            if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
+            GET_TIMER(ts, te, timing[0])
+
+            /* table look up the seq values */
+            for (ii=0; ii<count[0]; ii++) {
+                keyv key(dset_dims[1]);
+                for (jj=0; jj<dset_dims[1]; jj++)
+                    key[jj] = index_buf[ii][jj];
+                seq_buf[ii] = lookup_table[key];
+                mp[seq_buf[ii]]++;
+            }
+            GET_TIMER(ts, te, timing[1])
+
+            if (create_seq) {
+                /* write a chunk to seq dataset */
+                count[1] = 1;
+                err = H5Sselect_hyperslab(out_fspace, H5S_SELECT_SET, start, NULL, ones, count);
+                memspace = H5Screate_simple(1, count, NULL);
+                err = H5Dwrite(seq_id, H5T_STD_I64LE, memspace, out_fspace, H5P_DEFAULT, seq_buf);
+                if (err < 0) CALLBACK_ERROR("H5Dwrite", seq_name)
+                err = H5Sclose(memspace);
+                if (err < 0) CALLBACK_ERROR("H5Sclose", seq_name)
+            }
+            off    += count[0];
+            remain -= count[0];
+            GET_TIMER(ts, te, timing[2])
+        }
+
+        free(index_buf[0]);
+        free(index_buf);
+
+        /* close the index dataset */
         if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)
-
-        GET_TIMER(ts, te, timing[0])
-
-        /* table look up the seq values */
-        for (ii=0; ii<dset_dims[0]; ii++) {
-            keyv key(dset_dims[1]);
-            for (jj=0; jj<dset_dims[1]; jj++)
-                key[jj] = buf[ii][jj];
-            seq_buf[ii] = lookup_table[key];
-        }
-        free(buf[0]);
-        free(buf);
-
-        err = H5Sclose(space_id);
-        if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
-        hsize_t maxdims[2] = {H5S_UNLIMITED, 1};
-        dset_dims[1] = 1;
-        space_id = H5Screate_simple(ndims, dset_dims, maxdims);
-        if (err < 0) CALLBACK_ERROR("H5Screate_simple", dset_name)
-
-        hsize_t chunk_dims[2];
-        chunk_dims[0] = 256 * 1024;
-        chunk_dims[1] = 1;
-        err = H5Pset_chunk(dcpl_id, 2, chunk_dims);
-        if (err < 0) CALLBACK_ERROR("H5Pset_chunk", dset_name)
     }
+    free(seq_buf);
 
-    GET_TIMER(ts, te, timing[1])
-
-seq_create:
+    err = H5Sclose(in_fspace);
+    if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
     if (create_seq) {
-        sprintf(key_name, "%s.seq", part_key_base);
-
-        /* create the new partition key dataset */
-        seq_id = H5Dcreate2(grp_id, key_name, H5T_STD_I64LE, space_id,
-                            H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
-        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", key_name)
-
-        /* write the entire dataset */
-        if (dset_dims[0] > 0) {
-            err = H5Dwrite(seq_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL,
-                           H5P_DEFAULT, seq_buf);
-            if (err < 0) CALLBACK_ERROR("H5Dwrite", key_name)
-        }
-
+        err = H5Sclose(out_fspace);
+        if (err < 0) CALLBACK_ERROR("H5Sclose", seq_name)
         /* close dataset */
         err = H5Dclose(seq_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
+        if (err < 0) CALLBACK_ERROR("H5Dclose", seq_name)
     }
+
+seq_cnt_create:
     if (create_seq_cnt) {
         /* create the new partition key sequence-count dataset */
-        nkeys = 1;
-        prev_key = seq_buf[0];
-        for (ii=1; ii<dset_dims[0]; ii++) {
-            if (seq_buf[ii] != prev_key) {
-                prev_key = seq_buf[ii];
-                nkeys++;
-            }
-        }
-        /* allocate buffer for partition key dataset, seq */
-        seq_cnt = (int64_t*) malloc(nkeys * 2 * sizeof(int64_t));
-        seq_cnt[0] = seq_buf[0];
-        seq_cnt[1] = 1;
-        prev_key = seq_buf[0];
-        for (jj=0, ii=1; ii<dset_dims[0]; ii++) {
-            if (seq_buf[ii] != prev_key) {
-                jj++;
-                seq_cnt[jj*2]   = seq_buf[ii];
-                seq_cnt[jj*2+1] = 1;
-                prev_key = seq_buf[ii];
-            }
-            else
-                seq_cnt[jj*2+1]++;
-        }
-        assert(jj+1 == (size_t)nkeys);
-
-        sprintf(key_name, "%s.seq_cnt", part_key_base);
-
-        /* close space */
-        if (space_id >= 0) {
-            err = H5Sclose(space_id);
-            if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
+        size_t nkeys = mp.size();
+        int64_t *seq_cnt = (int64_t*) malloc(nkeys * 2 * sizeof(int64_t));
+        // Traverse through map and print frequencies
+        ii = 0;
+        for (auto x : mp) {
+            seq_cnt[ii++] = x.first;
+            seq_cnt[ii++] = x.second;
         }
 
-        dset_dims[0] = nkeys;
-        dset_dims[1] = 2;
-        space_id = H5Screate_simple(2, dset_dims, NULL);
-        if (err < 0) CALLBACK_ERROR("H5Screate_simple", dset_name)
+        /* create the new partition key dataset */
+        sprintf(seq_cnt_name, "%s.seq_cnt", part_key_base);
 
-        seq_id = H5Dcreate2(grp_id, key_name, H5T_STD_I64LE, space_id,
-                            H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", key_name)
+        /* seq dataset will be of the same dimension lengths */
+        hsize_t maxdims[2] = {H5S_UNLIMITED, 2};
+        hsize_t seq_cnt_dims[2] = {nkeys, 2};
+        out_fspace = H5Screate_simple(2, seq_cnt_dims, maxdims);
+        if (err < 0) CALLBACK_ERROR("H5Screate_simple", seq_cnt_name)
 
-        /* write the entire dataset */
-        if (dset_dims[0] > 0) {
-            err = H5Dwrite(seq_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL,
-                           H5P_DEFAULT, seq_cnt);
-            if (err < 0) CALLBACK_ERROR("H5Dwrite", key_name)
+        seq_cnt_id = H5Dcreate2(grp_id, seq_cnt_name, H5T_STD_I64LE, out_fspace,
+                                H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
+        if (seq_cnt_id < 0) CALLBACK_ERROR("H5Dcreate2", seq_cnt_name)
+
+        if (nkeys > 0) {
+            err = H5Dwrite(seq_cnt_id, H5T_STD_I64LE, H5S_ALL, H5S_ALL, H5P_DEFAULT, seq_cnt);
+            if (err < 0) CALLBACK_ERROR("H5Dwrite", seq_cnt_name)
         }
 
-        if (seq_cnt != NULL) free(seq_cnt);
+        free(seq_cnt);
 
+        err = H5Sclose(out_fspace);
+        if (err < 0) CALLBACK_ERROR("H5Sclose", seq_name)
         /* close dataset */
-        err = H5Dclose(seq_id);
-        if (err < 0) CALLBACK_ERROR("H5Dclose", key_name)
+        err = H5Dclose(seq_cnt_id);
+        if (err < 0) CALLBACK_ERROR("H5Dclose", seq_cnt_name)
     }
 
 fn_exit:
+    /* close create property */
+    err = H5Pclose(dcpl_id);
+    if (err < 0) RETURN_ERROR("H5Pclose", dset_name)
+
     GET_TIMER(ts, te, timing[2])
 
-    if (seq_buf != NULL) free(seq_buf);
-
-    /* close create property */
-    if (dcpl_id >= 0) {
-        err = H5Pclose(dcpl_id);
-        if (err < 0) RETURN_ERROR("H5Pclose", dset_name)
-    }
-    /* close space */
-    if (space_id >= 0) {
-        err = H5Sclose(space_id);
-        if (err < 0) CALLBACK_ERROR("H5Sclose", dset_name)
-    }
     /* close group */
     if (grp_id >= 0) {
         err = H5Gclose(grp_id);
@@ -784,7 +860,7 @@ int main(int argc, char **argv)
     else { /* the index datasets are stored together in a 2D array */
         long long *tmp;
 
-	/* open the dataset to collect the 1st dimension size. */
+        /* open the dataset to collect the 1st dimension size. */
         sprintf(dset_name, "%s/%s", grp_name, index_levels[0].c_str());
         dset = H5Dopen(fid, dset_name, H5P_DEFAULT);
         if (dset < 0) RETURN_ERROR("H5Dopen", dset_name)
@@ -800,7 +876,7 @@ int main(int argc, char **argv)
         tmp = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
 
         /* read the entire index dataset */
-        if (verbose) printf("Read index dataset %s\n", dset_name);
+        if (verbose) printf("Read index dataset [%llu][%llu] %s\n", dset_dims[0], dset_dims[1], dset_name);
         err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp);
         if (err < 0) RETURN_ERROR("H5Dread", dset_name)
         if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)

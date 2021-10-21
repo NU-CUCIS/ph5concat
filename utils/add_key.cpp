@@ -271,6 +271,10 @@ seq_create:
     err = H5Pset_chunk(dcpl_id, 2, chunk_dims);
     if (err < 0) CALLBACK_ERROR("H5Pset_chunk", seq_name)
 
+    /* enable compression */
+    err = H5Pset_deflate(dcpl_id, 6);
+    if (err < 0) CALLBACK_ERROR("H5Pset_deflate", seq_name)
+
     if (create_seq) {
         /* seq dataset will be of the same dimension lengths */
         hsize_t maxdims[2] = {H5S_UNLIMITED, 1};

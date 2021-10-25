@@ -10,6 +10,7 @@
 * [check_seq_incr](#check_seq_incr) -- checks contents of partitioning
   key datasets in all groups for whether their values are organized in a
   monotonically nondecreasing order.
+* [nu_stat](#nu_stat) -- dump some statistics of an HDF5 file
 
 ---
 ## rechunk
@@ -344,4 +345,41 @@ Example run:
   All datasets pass the check
   ```
 
+
+---
+## nu_stat
+
+**nu_stat** is a utility program to be run in sequential. Given an HDF5 file
+that may contain partition key datasets, it collects some statistics of the
+groups and datasets in the file.
+
+Command usage:
+  ```
+  % ./nu_stat -h
+  Usage: nu_stat [-h|-v|-e] file
+    [-h]         print this command usage message
+    [-v]         verbose mode (default: off)
+    [-e]         event ID dataset name
+    file         input file name (required)
+
+    This utility program prints the statistics of an input HDF5 file
+    *ph5concat version 1.1.0 of March 1, 2020.
+  ```
+
+Example run:
+  ```
+  % ./nu_stat uboone_nue_full_seq.h5 -e /event_table/event_id 
+  input file name                   = uboone_nue_full_seq.h5
+  input file size                   =  55481288122 B =  52911.1 MiB =  51.7 GiB
+  total dataset size                = 196478992384 B = 187377.0 MiB = 183.0 GiB
+  number of groups in the file      =            5
+  total number of datasets          =           43
+  MAX single group size             =  86042476544 B =  82056.5 MiB =  80.1 GiB
+  MIN single group size             =      5161740 B =      4.9 MiB =   0.0 GiB
+  event ID dataset                  = /event_table/event_id
+  Total number of event IDs         =        86029
+  Total number of non-empty events  =        86029
+  MAX single event data size        =      7214180 B =   7045.1 KiB =   6.9 MiB
+  MIN single event data size        =       217032 B =    211.9 KiB =   0.2 MiB
+  ```
 

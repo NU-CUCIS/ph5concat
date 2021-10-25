@@ -18,7 +18,8 @@ noinst_PROGRAMS = rechunk \
                   add_key \
                   sort_file_list \
                   check_seq_incr \
-                  add_spill_index
+                  add_spill_index \
+                  nu_stat
 
 rechunk_SOURCES = rechunk.c
 add_key_SOURCES = add_key.cpp

@@ -26,6 +26,7 @@ add_key_SOURCES = add_key.cpp
 sort_file_list_SOURCES = sort_file_list.cpp
 check_seq_incr_SOURCES = check_seq_incr.cpp
 add_spill_index_SOURCES = add_spill_index.cpp
+nu_stat_SOURCES = nu_stat.c
 
 EXTRA_DIST = README.md \
              batch.sh

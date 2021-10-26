@@ -387,15 +387,17 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
             assert(ndims == 2);
 
-            rdata[0] = (char*) malloc(dims[0] * MAX_STR_LEN);
-            for (ii=1; ii<dims[0]; ii++) rdata[ii] = rdata[ii-1] + MAX_STR_LEN;
+            rdata[0] = (char*) malloc(round_len * MAX_STR_LEN);
+            for (ii=1; ii<round_len; ii++)
+                rdata[ii] = rdata[ii-1] + MAX_STR_LEN;
 
             /* prepare reading the fixed-length dataset */
             hid_t memtype = H5Tcopy(H5T_C_S1);
             if (memtype < 0) HANDLE_ERROR("H5Tcopy");
-            err = H5Tset_size(memtype, dims[1]);
+            err = H5Tset_size(memtype, MAX_STR_LEN);
             if (err < 0) HANDLE_ERROR("H5Tset_size");
-            err = H5Dread(dset_id, memtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, rdata[0]);
+            err = H5Dread(dset_id, memtype, memspace_id, space_id, H5P_DEFAULT,
+                          rdata[0]);
             if (err < 0) HANDLE_ERROR("H5Dread "+dset.name);
             err = H5Tclose(memtype);
             if (err < 0) HANDLE_ERROR("H5Tclose");
@@ -459,9 +461,23 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
     err = H5Sselect_hyperslab(space_id, H5S_SELECT_SET, offs, NULL, one, lens);
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
-    /* Write the data. */
-    err = H5Dwrite(dset.out_dset_id, dset.type_id, memspace_id,
-                   space_id, dxpl_id, wbuf);
+    if (dset.type_class == H5T_STRING) {
+        /* fixed-length string dataset */
+        hid_t memtype = H5Tcopy(H5T_C_S1);
+        if (memtype < 0) HANDLE_ERROR("H5Tcopy");
+        err = H5Tset_size(memtype, MAX_STR_LEN);
+        if (err < 0) HANDLE_ERROR("H5Tset_size");
+        /* Write the data. */
+        err = H5Dwrite(dset.out_dset_id, memtype, memspace_id, space_id,
+                       dxpl_id, wbuf);
+        err = H5Tclose(memtype);
+        if (err < 0) HANDLE_ERROR("H5Tclose");
+    }
+    else {
+        /* Write the data. */
+        err = H5Dwrite(dset.out_dset_id, dset.type_id, memspace_id, space_id,
+                       dxpl_id, wbuf);
+    }
     if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
 
 fn_exit:

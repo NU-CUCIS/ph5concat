@@ -263,12 +263,23 @@ int main(int argc, char **argv)
     vector<string> myinputs;
     size_t offset, length, remainder;
 #if defined PROFILE && PROFILE
+    int i;
     double ts, step_time[8], max_time[10];
     long step_vmrss[9], step_vmsize[9];
     long total_vmrss[9], total_vmsize[9];
     long min_vmrss[9], min_vmsize[9];
     long avg_vmrss[9], avg_vmsize[9];
     long max_vmrss[9], max_vmsize[9];
+
+    for (i=0; i<8;  i++) step_time[i] = 0;
+    for (i=0; i<10; i++) max_time[i]  = 0;
+    for (i=0; i<9; i++) {
+        step_vmrss[i]  = step_vmsize[i]  = 0;
+        total_vmrss[i] = total_vmsize[i] = 0;
+        min_vmrss[i]   = min_vmsize[i]   = 0;
+        avg_vmrss[i]   = avg_vmsize[i]   = 0;
+        max_vmrss[i]   = max_vmsize[i]   = 0;
+    }
 #endif
 
     MPI_Init(&argc, &argv);

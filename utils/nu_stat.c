@@ -453,6 +453,46 @@ usage(char *progname)
 
     printf("Usage: %s [-h|-v|-e name|-b num] file\n%s\n", progname, USAGE);
 }
+/*----< helper functions() >-------------------------------------------------------------*/
+int cmpfunc (const void * a, const void * b) {
+   return ( *(hsize_t*)a - *(hsize_t*)b );
+}
+
+void histogram(hsize_t values[], int n, int freqsize)
+{
+    int i = 0, j = 0; 
+    /* Initialize frequency array */
+    int maxval = 0; for (i=0; i<n; i++) { if (values[i] > maxval) maxval = values[i]; }
+    int arrsize = maxval / freqsize; 
+    hsize_t* frequency = (hsize_t*) calloc(arrsize, sizeof(hsize_t)); 
+    //static hsize_t frequency[arrsize]; for (i=0; i<freqsize; i++) { frequency[i] = 0; }
+    /* Create histogram array */
+    int round = freqsize / 2; 
+    int index;
+    for (i = 0 ; i < n ; i++) {
+	int x = values[i];
+	//printf("value: %d\n", x);
+	if (x % freqsize >= round) {
+	    index = (x + freqsize) - (x % freqsize);
+	    index /= freqsize;
+	    //printf("index: %d\n", index);
+	}
+	else { 
+	    index = x - (x % freqsize); 
+	    index /= freqsize;
+	    //printf("index: %d\n", index);
+	}
+	frequency[index]++; 
+    }
+    
+    /* Write histogram array to CSV file */
+    FILE *fp;
+    fp = fopen("histogram.csv", "w+");
+    for (i = 0; i < arrsize; i++) {
+	fprintf(fp, "%d, %llu\n", i, frequency[i]);
+    }
+    //return frequency;   
+}
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
@@ -632,10 +672,26 @@ int main(int argc, char **argv)
                                            * it_op.groups[k].sum_row_size;
                 j += 2;
             }
+	    
+	    /* print contents of event data size array before sort */
+	    /*
+	    int n = sizeof(it_op.evt_size)/sizeof(hsize_t);
+	    for (i=0; i<n; i++) {
+		printf("Event data size array: %d\n", it_op.evt_size[i]);
+	    }
+	    */
+	    //selectionSort(it_op.evt_size, n);
+	    
+	    /* print contents of event data size array after sort */
+	    /*
+	    for (i=0; i<sizeof(it_op.evt_size)/sizeof(hsize_t); i++) {
+		printf("Event data size array: %d\n", it_op.evt_size[i]);
+	    }
+	    */
             free(seq_cnt);
 
             err = H5Dclose(dset);
-            if (err < 0) HANDLE_ERROR("H5Dclose", dset_name)
+            if (err < 0) HANDLE_ERROR("H5Dclose", dset_name);
         }
 
         max_evt_size = 0;
@@ -651,6 +707,9 @@ int main(int argc, char **argv)
         qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
         median_evt_size = it_op.evt_size[(it_op.num_events+1)/2];
     }
+    /* Sort event sizes array to create histogram */ 
+    qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
+    //histogram(it_op.evt_size, it_op.num_events, 1000);
 
 fn_exit:
     if (fd >= 0) {

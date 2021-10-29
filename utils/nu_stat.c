@@ -488,6 +488,8 @@ void histogram(hsize_t values[], int n, int bin_size)
     for (i = 0; i < arrsize; i++) {
 	fprintf(fp, "%d, %llu\n", i, frequency[i]);
     }
+
+    free(frequency);
 }
 
 /*----< main() >-------------------------------------------------------------*/

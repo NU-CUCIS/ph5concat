@@ -457,30 +457,27 @@ usage(char *progname)
 int cmpfunc (const void * a, const void * b) {
    return ( *(hsize_t*)a - *(hsize_t*)b );
 }
-
-void histogram(hsize_t values[], int n, int freqsize)
+void histogram(hsize_t values[], int n, int bin_size)
 {
     int i = 0, j = 0; 
+
     /* Initialize frequency array */
     int maxval = 0; for (i=0; i<n; i++) { if (values[i] > maxval) maxval = values[i]; }
-    int arrsize = maxval / freqsize; 
+    int arrsize = maxval / bin_size; 
     hsize_t* frequency = (hsize_t*) calloc(arrsize, sizeof(hsize_t)); 
-    //static hsize_t frequency[arrsize]; for (i=0; i<freqsize; i++) { frequency[i] = 0; }
+
     /* Create histogram array */
-    int round = freqsize / 2; 
+    int round = bin_size / 2; 
     int index;
     for (i = 0 ; i < n ; i++) {
 	int x = values[i];
-	//printf("value: %d\n", x);
-	if (x % freqsize >= round) {
-	    index = (x + freqsize) - (x % freqsize);
-	    index /= freqsize;
-	    //printf("index: %d\n", index);
+	if (x % bin_size >= round) {
+	    index = (x + bin_size) - (x % bin_size);
+	    index /= bin_size;
 	}
 	else { 
-	    index = x - (x % freqsize); 
-	    index /= freqsize;
-	    //printf("index: %d\n", index);
+	    index = x - (x % bin_size); 
+	    index /= bin_size;
 	}
 	frequency[index]++; 
     }
@@ -491,7 +488,6 @@ void histogram(hsize_t values[], int n, int freqsize)
     for (i = 0; i < arrsize; i++) {
 	fprintf(fp, "%d, %llu\n", i, frequency[i]);
     }
-    //return frequency;   
 }
 
 /*----< main() >-------------------------------------------------------------*/
@@ -672,22 +668,6 @@ int main(int argc, char **argv)
                                            * it_op.groups[k].sum_row_size;
                 j += 2;
             }
-	    
-	    /* print contents of event data size array before sort */
-	    /*
-	    int n = sizeof(it_op.evt_size)/sizeof(hsize_t);
-	    for (i=0; i<n; i++) {
-		printf("Event data size array: %d\n", it_op.evt_size[i]);
-	    }
-	    */
-	    //selectionSort(it_op.evt_size, n);
-	    
-	    /* print contents of event data size array after sort */
-	    /*
-	    for (i=0; i<sizeof(it_op.evt_size)/sizeof(hsize_t); i++) {
-		printf("Event data size array: %d\n", it_op.evt_size[i]);
-	    }
-	    */
             free(seq_cnt);
 
             err = H5Dclose(dset);
@@ -709,7 +689,6 @@ int main(int argc, char **argv)
     }
     /* Sort event sizes array to create histogram */ 
     qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
-    //histogram(it_op.evt_size, it_op.num_events, 1000);
 
 fn_exit:
     if (fd >= 0) {

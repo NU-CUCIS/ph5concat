@@ -479,6 +479,8 @@ void histogram(hsize_t values[], int n, int bin_size)
 	    index = x - (x % bin_size); 
 	    index /= bin_size;
 	}
+	if (index >= arrsize) { index = arrsize - 1; }
+	assert(index < arrsize);
 	frequency[index]++; 
     }
     

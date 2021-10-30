@@ -502,7 +502,11 @@ int main(int argc, char **argv)
     herr_t err;
     hid_t fd=-1;
     hsize_t non_empty_evts;
+<<<<<<< HEAD
     float max_evt_size, min_evt_size, median_evt_size, median_grp_size;
+=======
+    float max_evt_size, min_evt_size, median_evt_size;
+>>>>>>> 8106b57... find median file size
     H5G_info_t grp_info;
     op_data it_op;
     struct stat file_stat;
@@ -579,6 +583,8 @@ int main(int argc, char **argv)
         }
         else { /* check if the event ID dataset exists */
             htri_t dset_exist = H5Lexists(fd, evt_dset, H5P_DEFAULT);
+            printf("MIN single event data size        = %12.f B = %8.1f KiB = %5.1f MiB\n",
+                   min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
             if (dset_exist < 0) HANDLE_ERROR("H5Lexists", evt_dset)
             if (dset_exist == 0) {
                 printf("Warning: dataset '%s' does not exist.\n", evt_dset);
@@ -693,6 +699,7 @@ int main(int argc, char **argv)
     }
     /* Sort event sizes array to create histogram */ 
     qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
+    median_evt_size = it_op.evt_size[(it_op.num_events+1)/2]; 
 
 fn_exit:
     if (fd >= 0) {

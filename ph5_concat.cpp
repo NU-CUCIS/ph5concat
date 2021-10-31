@@ -133,6 +133,13 @@ Concatenator::~Concatenator()
  * decompression time. However, experiments show it is not as effective as
  * doing in-memory I/O. However, we observed no significant difference in
  * performance for reading 2579 small-sized datasets.
+ *
+ * Note from HDF5 document for H5Pset_cache(), it says the followings.
+ * Raw dataset chunk caching is not currently supported when using the MPI I/O
+ * and MPI POSIX file drivers in read/write mode; see H5Pset_fapl_mpio and
+ * H5Pset_fapl_mpiposix, respectively. When using one of these file drivers,
+ * all calls to H5Dread and H5Dwrite will access the disk directly, and
+ * H5Pset_cache will have no effect on performance.
  */
 static
 int set_rawdata_cache(hid_t  fapl_id,

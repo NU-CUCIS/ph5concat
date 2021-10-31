@@ -107,11 +107,12 @@ static void
 usage(char *progname)
 {
 #define USAGE   "\
-  [-h]         print this command usage message\n\
-  [-v]         verbose mode (default: off)\n\
-  -i file      name of input text file containing file names to be merged (required)\n\n\
-  -o file      name of output HDF5 file (required)\n\n\
-  This utility program merge multiple HDF5 files as links into one master file\n\
+  [-h]     print this command usage message\n\
+  [-v]     verbose mode (default: off)\n\
+  -i file  name of input text file (required)\n\n\
+  -o file  name of output HDF5 file (required)\n\n\
+  This utility program creates a master file and adds groups of all input\n\n\
+  files as external links, The group names must be all distinct. \n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
     printf("Usage: %s [-h|-v] -i input_file -o output_file\n%s\n", progname, USAGE);
@@ -237,7 +238,6 @@ int main(int argc, char **argv)
     check_h5_objects(outfname, it_op.out_fd);
     err = H5Fclose(it_op.out_fd);
     if (err < 0) HANDLE_ERROR("H5Fclose ",outfname)
-
 
 fn_exit:
 

@@ -279,7 +279,7 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
         if (grp < 0) HANDLE_ERROR("H5Oopen", name)
 
         err = H5Oget_info(grp, &obj_info, H5O_INFO_BASIC);
-	if (err < 0) HANDLE_ERROR("H5Oget_info", name)
+        if (err < 0) HANDLE_ERROR("H5Oget_info", name)
 
         if (obj_info.type == H5O_TYPE_GROUP) {
             err = H5Gget_info(grp, &grp_info);
@@ -351,6 +351,57 @@ int check_h5_objects(const char *filename, hid_t fid)
     return howmany;
 }
 
+/*----< cmpfunc() >----------------------------------------------------------*/
+static
+int cmpfunc (const void * a, const void * b) {
+
+    if (*((hsize_t *)a) > *((hsize_t *)b)) return (1);
+    if (*((hsize_t *)a) < *((hsize_t *)b)) return (-1);
+    return (0);
+}
+
+/*----< histogram() >--------------------------------------------------------*/
+void histogram(hsize_t values[], int n, int bin_size, char *fname)
+{
+    int i;
+
+    /* Initialize frequency array */
+    hsize_t maxval = 0;
+    for (i=0; i<n; i++) { if (values[i] > maxval) maxval = values[i]; }
+
+    hsize_t arrsize = maxval / bin_size;
+    hsize_t* frequency = (hsize_t*) calloc(arrsize, sizeof(hsize_t));
+
+    /* Create histogram array */
+    hsize_t round = bin_size / 2;
+    hsize_t index;
+    for (i = 0 ; i < n ; i++) {
+        hsize_t x = values[i];
+        if (x % bin_size >= round) {
+            index = (x + bin_size) - (x % bin_size);
+            index /= bin_size;
+        }
+        else {
+            index = x - (x % bin_size);
+            index /= bin_size;
+        }
+        if (index >= arrsize) { index = arrsize - 1; }
+        assert(index >= 0);
+        assert(index < arrsize);
+        frequency[index]++;
+    }
+
+    /* Write histogram array to CSV file */
+    FILE *fp;
+    fp = fopen(fname, "w");
+    for (i = 0; i < arrsize; i++) {
+        fprintf(fp, "%d, %llu\n", i, frequency[i]);
+    }
+    fclose(fp);
+
+    free(frequency);
+}
+
 /*----< usage() >------------------------------------------------------------*/
 static void
 usage(char *progname)
@@ -359,22 +410,23 @@ usage(char *progname)
   [-h]         print this command usage message\n\
   [-v]         verbose mode (default: off)\n\
   [-e name]    event ID dataset name\n\
+  [-b num]     bin width for creating event size histogram (default: 100000)\n\
   file         input file name (required)\n\n\
   This utility program prints the statistics of an input HDF5 file\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-e name] file\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-e name|-b num] file\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    int i, j, k, c, err_exit=0;
+    int i, j, k, c, err_exit=0, bin_width=100000;
     char *fname=NULL, *evt_dset=NULL;
     herr_t err;
     hid_t fd=-1;
     hsize_t non_empty_evts;
-    float max_evt_size, min_evt_size;
+    float max_evt_size, min_evt_size, median_evt_size, median_grp_size;
     H5G_info_t grp_info;
     op_data it_op;
     struct stat file_stat;
@@ -382,13 +434,15 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hve:")) != -1)
+    while ((c = getopt(argc, argv, "hve:b:")) != -1)
         switch(c) {
             case 'v': verbose = 1;
                       break;
             case 'h': usage(argv[0]);
                       return 0;
             case 'e': evt_dset = strdup(optarg);
+                      break;
+            case 'b': bin_width = atoi(optarg);
                       break;
             default : usage(argv[0]);
                       return 1;
@@ -544,16 +598,19 @@ int main(int argc, char **argv)
             err = H5Dclose(dset);
             if (err < 0) HANDLE_ERROR("H5Dclose", dset_name)
         }
-    }
 
-    max_evt_size = 0;
-    min_evt_size = LONG_MAX;
-    non_empty_evts = 0;
-    for (i=0; i<it_op.num_events; i++) {
-        if (it_op.evt_size[i] == 0) continue;
-        non_empty_evts++;
-        max_evt_size = MAX(max_evt_size, it_op.evt_size[i]);
-        min_evt_size = MIN(min_evt_size, it_op.evt_size[i]);
+        max_evt_size = 0;
+        min_evt_size = LONG_MAX;
+        non_empty_evts = 0;
+        for (i=0; i<it_op.num_events; i++) {
+            if (it_op.evt_size[i] == 0) continue;
+            non_empty_evts++;
+            max_evt_size = MAX(max_evt_size, it_op.evt_size[i]);
+            min_evt_size = MIN(min_evt_size, it_op.evt_size[i]);
+        }
+        /* Sort event sizes array to create histogram */
+        qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
+        median_evt_size = it_op.evt_size[(it_op.num_events+1)/2];
     }
 
 fn_exit:
@@ -563,8 +620,9 @@ fn_exit:
         if (err < 0) printf("Error at line %d: H5Fclose\n",__LINE__);
     }
 
-    hsize_t total_num_dsets = 0;
+    hsize_t total_num_dsets=0, *group_sizes;
     float total_dset_size=0, max_grp_size, min_grp_size;
+    group_sizes = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     max_grp_size = 0;
     min_grp_size = INT_MAX;
     for (i=0; i<it_op.num_groups; i++) {
@@ -572,7 +630,11 @@ fn_exit:
         total_dset_size += it_op.groups[i].sum_dset_size;
         max_grp_size = MAX(max_grp_size, it_op.groups[i].sum_dset_size);
         min_grp_size = MIN(min_grp_size, it_op.groups[i].sum_dset_size);
+        group_sizes[i] = it_op.groups[i].sum_dset_size;
     }
+    qsort(group_sizes, it_op.num_groups, sizeof(hsize_t), cmpfunc);
+    median_grp_size = group_sizes[(it_op.num_groups+1)/2];
+    histogram(group_sizes, it_op.num_groups, bin_width, "group_size_hist.csv");
 
     stat(fname, &file_stat);
     off_t fsize = file_stat.st_size;
@@ -585,20 +647,27 @@ fn_exit:
                total_dset_size, total_dset_size/1048576.0, total_dset_size/1073741824.0);
         printf("number of groups in the file      = %12llu\n", it_op.num_groups);
         printf("total number of datasets          = %12llu\n", total_num_dsets);
-        printf("MAX single group size             = %12.f B = %8.1f MiB = %5.1f GiB\n",
+        printf("MAXIMAL single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                max_grp_size, max_grp_size/1048576.0, max_grp_size/1073741824.0);
-        printf("MIN single group size             = %12.f B = %8.1f MiB = %5.1f GiB\n",
+        printf("MINIMAL single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                min_grp_size, min_grp_size/1048576.0, min_grp_size/1073741824.0);
+        printf("MEDIAN  single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
+               median_grp_size, median_grp_size/1048576.0, median_grp_size/1073741824.0);
         if (evt_dset != NULL) {
             printf("event ID dataset                  = %s\n", evt_dset);
             printf("Total number of event IDs         = %12llu\n", it_op.num_events);
             printf("Total number of non-empty events  = %12llu\n", non_empty_evts);
-            printf("MAX single event data size        = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MAXIMAL single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
                    max_evt_size, max_evt_size/1024.0, max_evt_size/1048576.0);
-            printf("MIN single event data size        = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MINIMAL single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
                    min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
+            printf("MEDIAN  single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+                   median_evt_size, median_evt_size/1024.0, median_evt_size/1048576.0);
+            histogram(it_op.evt_size, it_op.num_events, bin_width, "event_size_hist.csv");
         }
     }
+
+    free(group_sizes);
     if (it_op.groups != NULL) free(it_op.groups);
     if (evt_dset != NULL) free(evt_dset);
     if (it_op.evt_group != NULL) free(it_op.evt_group);

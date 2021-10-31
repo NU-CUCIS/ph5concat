@@ -33,15 +33,15 @@ static int verbose;
 }
 
 typedef struct {
-    char      name[128];
-    int       num_dsets;
+    char      name[128];      /* name of group */
+    int       num_dsets;      /* number of datasets in this group */
     hsize_t   sum_row_size;   /* size sum of a row of all datasets */
     hsize_t   sum_dset_size;  /* size sum of all datasets */
 } group_meta;
 
 /* parameters to be passed to the call back function */
 typedef struct {
-    int          gid;
+    int          gid;         /* array index point to groups[] */
     hsize_t      num_groups;  /* number of groups */
     group_meta  *groups;      /* metadata of groups */
     char        *evt_group;   /* event ID dataset's group name */
@@ -51,17 +51,16 @@ typedef struct {
     herr_t       err;
 } op_data;
 
-/*----< metadata() >---------------------------------------------------------*/
+/*----< dataset_metadata() >-------------------------------------------------*/
 static
 herr_t dataset_metadata(hid_t       loc_id,
                         const char *name,
                         op_data    *it_op)
 {
     int i, err_exit=0;
-    herr_t err=0;
-
     char *type_name, *layout_name;
     size_t type_size;
+    herr_t err=0;
     hid_t dset, space_id, type_id, r_dcpl;
     hsize_t nelems, dims[2], maxdims[2], chunk_dims[2];
     H5D_layout_t layout;
@@ -133,59 +132,60 @@ herr_t dataset_metadata(hid_t       loc_id,
     r_dcpl = H5Dget_create_plist(dset);
     if (r_dcpl < 0) HANDLE_ERROR("H5Dget_create_plist", name)
 
-        /* Retrieve input dataset's data layout */
-        layout = H5Pget_layout(r_dcpl);
-        if (layout < 0) HANDLE_ERROR("H5Pget_layout", name)
+    /* Retrieve input dataset's data layout */
+    layout = H5Pget_layout(r_dcpl);
+    if (layout < 0) HANDLE_ERROR("H5Pget_layout", name)
 
-        /* Retrieve input dataset's data chunk dimensions */
-        if (layout == H5D_CHUNKED) {
-            err = H5Pget_chunk(r_dcpl, ndims, chunk_dims);
-            if (err < 0) HANDLE_ERROR("H5Pget_chunk", name)
-            layout_name = "H5D_CHUNKED";
+    /* Retrieve input dataset's data chunk dimensions */
+    if (layout == H5D_CHUNKED) {
+        err = H5Pget_chunk(r_dcpl, ndims, chunk_dims);
+        if (err < 0) HANDLE_ERROR("H5Pget_chunk", name)
+        layout_name = "H5D_CHUNKED";
+    }
+    else if (layout == H5D_CONTIGUOUS)
+        layout_name = "H5D_CONTIGUOUS";
+    else if (layout == H5D_COMPACT)
+        layout_name = "H5D_COMPACT";
+
+    /* close input dataset creation property */
+    err = H5Pclose(r_dcpl);
+    if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl", name)
+
+    if (verbose) {
+        printf("\tDATASET \"%s\"\n",dataset_name);
+        printf("\t\tDATATYPE %s\n",type_name);
+        if (ndims == 1) {
+            printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
+            printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
+            if (maxdims[0] == H5S_UNLIMITED)
+                printf("( H5S_UNLIMITED )\n");
+            else
+                printf("( %lld )\n", dims[0]);
+            if (layout == H5D_CHUNKED)
+                printf("\t\tSTORAGE_LAYOUT ( %lld )\n", chunk_dims[0]);
+            else
+                printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
         }
-        else if (layout == H5D_CONTIGUOUS)
-            layout_name = "H5D_CONTIGUOUS";
-        else if (layout == H5D_COMPACT)
-            layout_name = "H5D_COMPACT";
-
-        /* close input dataset creation property */
-        err = H5Pclose(r_dcpl);
-        if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl", name)
-
-        if (verbose) {
-            printf("\tDATASET \"%s\"\n",dataset_name);
-            printf("\t\tDATATYPE %s\n",type_name);
-            if (ndims == 1) {
-                printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
-                printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
-                if (maxdims[0] == H5S_UNLIMITED)
-                    printf("( H5S_UNLIMITED )\n");
-                else
-                    printf("( %lld )\n", dims[0]);
-                if (layout == H5D_CHUNKED)
-                    printf("\t\tSTORAGE_LAYOUT ( %lld )\n", chunk_dims[0]);
-                else
-                    printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
-            }
-            else if (ndims == 2) {
-                printf("\t\tDATASPACE ( %lld, %lld ) / ", dims[0], dims[1]);
-                if (maxdims[0] == H5S_UNLIMITED)
-                    printf("( H5S_UNLIMITED,");
-                else
-                    printf("( %lld", dims[0]);
-                if (maxdims[1] == H5S_UNLIMITED)
-                    printf(" H5S_UNLIMITED)\n");
-                else
-                    printf(" %lld)\n", dims[1]);
-                if (layout == H5D_CHUNKED)
-                    printf("\t\tSTORAGE_LAYOUT ( %lld, %lld)\n", chunk_dims[0], chunk_dims[1]);
-                else
-                    printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
-            }
+        else if (ndims == 2) {
+            printf("\t\tDATASPACE ( %lld, %lld ) / ", dims[0], dims[1]);
+            if (maxdims[0] == H5S_UNLIMITED)
+                printf("( H5S_UNLIMITED,");
+            else
+                printf("( %lld", dims[0]);
+            if (maxdims[1] == H5S_UNLIMITED)
+                printf(" H5S_UNLIMITED)\n");
+            else
+                printf(" %lld)\n", dims[1]);
+            if (layout == H5D_CHUNKED)
+                printf("\t\tSTORAGE_LAYOUT ( %lld, %lld)\n", chunk_dims[0],
+                       chunk_dims[1]);
+            else
+                printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
         }
+    }
 
-        err = H5Dclose(dset);
-        if (err < 0) HANDLE_ERROR("H5Dclose", name)
+    err = H5Dclose(dset);
+    if (err < 0) HANDLE_ERROR("H5Dclose", name)
 
 fn_exit:
     return (err_exit == 0) ? 0 : -1;
@@ -207,6 +207,7 @@ herr_t ext_metadata(hid_t       loc_id,        /* object ID */
 
     if (verbose) printf("%s name = %s\n",__func__,name);
 
+    /* retrieve info by following the external link */
     err = H5Gget_objinfo(loc_id, name, 1, &statbuf);
     if (err < 0) HANDLE_ERROR("H5Gget_objinfo", name)
 
@@ -216,11 +217,10 @@ herr_t ext_metadata(hid_t       loc_id,        /* object ID */
         if (err < 0) HANDLE_ERROR("dataset_metadata", name)
     }
     else if (statbuf.type == H5G_GROUP) {
-        printf(" Object with name %s is a group \n", name);
+        if (verbose) printf(" Object with name %s is a group \n", name);
     }
-    else {
+    else if (verbose)
         printf(" Unable to identify an object ");
-    }
 
 fn_exit:
     it_op->err = err_exit;
@@ -231,7 +231,7 @@ fn_exit:
      */
 }
 
-/*----< metadata() >---------------------------------------------------------*/
+/*----< link_metadata() >----------------------------------------------------*/
 /* call back function used in H5Ovisit() */
 static
 herr_t link_metadata(hid_t             loc_id,        /* object ID */
@@ -245,7 +245,6 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
     H5G_info_t grp_info;
 
     op_data *it_op = (op_data*)operator_data;
-
     it_op->err = 0;
 
     if (info->type == H5L_TYPE_EXTERNAL) {
@@ -253,16 +252,19 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
         grp = H5Oopen(loc_id, name, H5P_DEFAULT);
         if (grp < 0) HANDLE_ERROR("H5Oopen", name)
 
+        /* inquire number of datasets in the external group */
         err = H5Gget_info(grp, &grp_info);
         if (err < 0) HANDLE_ERROR("H5Gget_info", name);
 
-        if (verbose) printf("H5L_TYPE_EXTERNAL %s has %lld datasets\n",name, grp_info.nlinks);
+        if (verbose)
+            printf("H5L_TYPE_EXTERNAL %s has %lld datasets\n",name,
+                   grp_info.nlinks);
 
         it_op->gid++;
         strcpy(it_op->groups[it_op->gid].name, name);
         it_op->groups[it_op->gid].num_dsets = grp_info.nlinks;
 
-        /* iterate all datasets in the group */
+        /* iterate all datasets in the group to collect their metadata */
         err = H5Giterate(loc_id, name, NULL, ext_metadata, it_op);
         if (err < 0) HANDLE_ERROR("H5Giterate", name)
 
@@ -283,7 +285,9 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
             err = H5Gget_info(grp, &grp_info);
             if (err < 0) HANDLE_ERROR("H5Gget_info", name);
 
-            if (verbose) printf("GROUP %s (contains %llu datasets)\n",name, grp_info.nlinks);
+            if (verbose)
+                printf("GROUP %s (contains %llu datasets)\n",
+                       name, grp_info.nlinks);
 
             it_op->gid++;
             strcpy(it_op->groups[it_op->gid].name, name);
@@ -291,6 +295,7 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
         }
         else if (obj_info.type == H5O_TYPE_DATASET) {
             if (verbose) printf("H5O_TYPE_DATASET %s\n",name);
+
             err = dataset_metadata(loc_id, name, it_op);
             if (err < 0) HANDLE_ERROR("dataset_metadata", name)
         }
@@ -309,182 +314,6 @@ fn_exit:
      * short-circuit success.
      */
 }
-
-#if 0
-/*----< metadata() >---------------------------------------------------------*/
-/* call back function used in H5Ovisit() */
-static
-herr_t metadata(hid_t             loc_id,        /* object ID */
-                const char       *name,          /* object name */
-                const H5O_info_t *info,          /* object metadata */
-                void             *operator_data) /* data passed from caller */
-{
-    static int gid=-1, dset_id;
-    int i, err_exit=0;
-    herr_t err=0;
-    op_data *it_op = (op_data*)operator_data;
-
-    it_op->err = 0;
-
-    if (info->type == H5O_TYPE_GROUP) {
-        /* Skip root group */
-        if (!strcmp(name, ".")) return 0;
-
-        H5G_info_t grp_info;
-        err = H5Gget_info_by_name(loc_id, name, &grp_info, H5P_DEFAULT);
-        if (err < 0) HANDLE_ERROR("H5Gget_info_by_name", name)
-
-        gid++;
-        dset_id = 0;
-
-        hsize_t num_dsets = grp_info.nlinks;
-        if (verbose) printf("GROUP %s (contains %llu datasets)\n",name, grp_info.nlinks);
-
-        strcpy(it_op->groups[gid].name, name);
-        it_op->groups[gid].num_dsets = num_dsets;
-    }
-    else if (info->type == H5O_TYPE_DATASET) {
-        /* this object is a dataset */
-        char *type_name, *layout_name;
-        size_t type_size;
-        hid_t dset, space_id, type_id, r_dcpl;
-        hsize_t nelems, dims[2], maxdims[2], chunk_dims[2];
-        H5D_layout_t layout;
-        H5T_class_t type_class;
-
-        /* retrieve group name and dataset name */
-        // char *name_copy = strdup(name);
-        // char *group_name = strtok(name_copy, "/");
-        char *dataset_name = strrchr(name, '/') + 1;
-
-        if (verbose) printf("check dataset %s\n",name);
-
-        /* Open input dataset */
-        dset = H5Dopen(loc_id, name, H5P_DEFAULT);
-        if (dset < 0) HANDLE_ERROR("H5Dopen", name)
-
-        /* Retrieve input dataset's data type */
-        type_id = H5Dget_type(dset);
-        if (type_id < 0) HANDLE_ERROR("H5Dget_type", name)
-
-        /* Retrieve data type size */
-        type_size = H5Tget_size(type_id);
-        if (type_size == 0) HANDLE_ERROR("H5Tget_size", name)
-
-        /* Retrieve data type class */
-        type_class = H5Tget_class(type_id);
-        if (type_class < 0) HANDLE_ERROR("H5Tget_class", name);
-
-        if (type_class == H5T_STRING)
-            type_name = "H5T_STRING";
-        else if (H5Tequal(type_id, H5T_IEEE_F32LE))
-            type_name = "H5T_IEEE_F32LE";
-        else if (H5Tequal(type_id, H5T_STD_I32LE))
-            type_name = "H5T_STD_I32LE";
-        else if (H5Tequal(type_id, H5T_STD_I64LE))
-            type_name = "H5T_STD_I64LE";
-        else
-            type_name = "unknown";
-
-        /* Open input dataset's space */
-        space_id = H5Dget_space(dset);
-        if (space_id < 0) HANDLE_ERROR("H5Dget_space", name)
-
-        /* Retrieve number of dimensions */
-        int ndims = H5Sget_simple_extent_ndims(space_id);
-        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims", name)
-
-        /* retrieve dimension sizes */
-        ndims = H5Sget_simple_extent_dims(space_id, dims, maxdims);
-        if (ndims < 0) HANDLE_ERROR("H5Sget_simple_extent_dims", name)
-
-        err = H5Sclose(space_id);
-        if (err < 0) HANDLE_ERROR("H5Sclose",name)
-
-        /* skip datasets event_id, event_id.seq, event_id.seq_cnt */
-        if (it_op->evt_dset == NULL ||
-            strncmp(it_op->evt_dset, dataset_name, strlen(it_op->evt_dset)))
-            it_op->groups[gid].sum_row_size += dims[1] * type_size;
-
-        nelems = 1;
-        for (i=0; i<ndims; i++) nelems *= dims[i];
-
-        /* accumulate all dataset sizes before compression */
-        it_op->groups[gid].sum_dset_size += nelems * type_size;
-
-        /* Retrieve input dataset's creation property list */
-        r_dcpl = H5Dget_create_plist(dset);
-        if (r_dcpl < 0) HANDLE_ERROR("H5Dget_create_plist", name)
-
-        /* Retrieve input dataset's data layout */
-        layout = H5Pget_layout(r_dcpl);
-        if (layout < 0) HANDLE_ERROR("H5Pget_layout", name)
-
-        /* Retrieve input dataset's data chunk dimensions */
-        if (layout == H5D_CHUNKED) {
-            err = H5Pget_chunk(r_dcpl, ndims, chunk_dims);
-            if (err < 0) HANDLE_ERROR("H5Pget_chunk", name)
-            layout_name = "H5D_CHUNKED";
-        }
-        else if (layout == H5D_CONTIGUOUS)
-            layout_name = "H5D_CONTIGUOUS";
-        else if (layout == H5D_COMPACT)
-            layout_name = "H5D_COMPACT";
-
-        /* close input dataset creation property */
-        err = H5Pclose(r_dcpl);
-        if (err < 0) HANDLE_ERROR("H5Pclose r_dcpl", name)
-
-        if (verbose) {
-            printf("\tDATASET \"%s\"\n",dataset_name);
-            printf("\t\tDATATYPE %s\n",type_name);
-            if (ndims == 1) {
-                printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
-                printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
-                if (maxdims[0] == H5S_UNLIMITED)
-                    printf("( H5S_UNLIMITED )\n");
-                else
-                    printf("( %lld )\n", dims[0]);
-                if (layout == H5D_CHUNKED)
-                    printf("\t\tSTORAGE_LAYOUT ( %lld )\n", chunk_dims[0]);
-                else
-                    printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
-            }
-            else if (ndims == 2) {
-                printf("\t\tDATASPACE ( %lld, %lld ) / ", dims[0], dims[1]);
-                if (maxdims[0] == H5S_UNLIMITED)
-                    printf("( H5S_UNLIMITED,");
-                else
-                    printf("( %lld", dims[0]);
-                if (maxdims[1] == H5S_UNLIMITED)
-                    printf(" H5S_UNLIMITED)\n");
-                else
-                    printf(" %lld)\n", dims[1]);
-                if (layout == H5D_CHUNKED)
-                    printf("\t\tSTORAGE_LAYOUT ( %lld, %lld)\n", chunk_dims[0], chunk_dims[1]);
-                else
-                    printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
-            }
-        }
-
-        err = H5Dclose(dset);
-        if (err < 0) HANDLE_ERROR("H5Dclose", name)
-
-        dset_id++;
-    }
-    else {
-        HANDLE_ERROR("unexpected data object type", name)
-    }
-
-fn_exit:
-    it_op->err = err_exit;
-    return (err_exit == 0) ? 0 : 1;
-    /* return a positive value causes the visit iterator to
-     * immediately return that positive value, indicating
-     * short-circuit success.
-     */
-}
-#endif
 
 /*----< check_h5_objects() >-------------------------------------------------*/
 static
@@ -641,30 +470,21 @@ int main(int argc, char **argv)
 
         /* number of event IDs is the size of dimension 0 */
         it_op.num_events = dims[0];
-        if (verbose) printf("Number of partitioning keys = %llu\n", it_op.num_events);
+        if (verbose)
+            printf("Number of partitioning keys = %llu\n", it_op.num_events);
 
         err = H5Sclose(space_id);
         if (err < 0) HANDLE_ERROR("H5Sclose",evt_dset)
         err = H5Dclose(dset);
         if (err < 0) HANDLE_ERROR("H5Dclose", evt_dset)
 
-        /* allocate array evt_size, amount of data per event across all groups */
+        /* allocate evt_size, amount of data per event across all groups */
         it_op.evt_size = (hsize_t*) calloc(it_op.num_events, sizeof(hsize_t));;
     }
 
     /* Iterate all objects and perform chunking adjustment */
-#if 0
-#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
-    err = H5Ovisit3(fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, metadata, &it_op, H5O_INFO_ALL);
-    if (err < 0) HANDLE_ERROR("H5Ovisit3", fname)
-#else
-    err = H5Ovisit(fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, metadata, &it_op);
-    if (err < 0) HANDLE_ERROR("H5Ovisit", fname)
-#endif
-    if (it_op.err < 0) HANDLE_ERROR("H5Ovisit", fname)
-#endif
-    /* check external links */
-    err = H5Lvisit(fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, link_metadata, &it_op);
+    err = H5Lvisit(fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, link_metadata,
+                   &it_op);
     if (err < 0) HANDLE_ERROR("H5Lvisit", fname)
 
     /* calculate event statistics */
@@ -678,7 +498,8 @@ int main(int argc, char **argv)
                 continue;
 
             /* construct dataset name for seq_cnt */
-            sprintf(dset_name, "/%s/%s.seq_cnt", it_op.groups[k].name, it_op.evt_dset);
+            sprintf(dset_name, "/%s/%s.seq_cnt", it_op.groups[k].name,
+                    it_op.evt_dset);
 
             /* check if the dataset exists */
             htri_t dset_exist = H5Lexists(fd, dset_name, H5P_DEFAULT);
@@ -705,15 +526,17 @@ int main(int argc, char **argv)
 
             /* read the entire dataset .seq_cnt */
             assert(dims[1] == 2);
-            int64_t *seq_cnt = (int64_t*) malloc(dims[0] * 2 * sizeof (int64_t));
+            int64_t *seq_cnt = (int64_t*) malloc(dims[0] * 2 * sizeof(int64_t));
 
             /* seq_cnt is a 2D array [number of sequences][count] */
-            err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, seq_cnt);
+            err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL,
+                          H5P_DEFAULT, seq_cnt);
             if (err < 0) HANDLE_ERROR("H5Dread ", dset_name)
 
             /* accumulate the event data size */
             for (i=0,j=0; i<dims[0]; i++) {
-                it_op.evt_size[seq_cnt[j]] += seq_cnt[j+1] * it_op.groups[k].sum_row_size;
+                it_op.evt_size[seq_cnt[j]] += seq_cnt[j+1]
+                                           * it_op.groups[k].sum_row_size;
                 j += 2;
             }
             free(seq_cnt);

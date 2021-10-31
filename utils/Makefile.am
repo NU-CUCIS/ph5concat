@@ -19,7 +19,8 @@ noinst_PROGRAMS = rechunk \
                   sort_file_list \
                   check_seq_incr \
                   add_spill_index \
-                  nu_stat
+                  nu_stat \
+                  nfile_link
 
 rechunk_SOURCES = rechunk.c
 add_key_SOURCES = add_key.cpp
@@ -27,6 +28,7 @@ sort_file_list_SOURCES = sort_file_list.cpp
 check_seq_incr_SOURCES = check_seq_incr.cpp
 add_spill_index_SOURCES = add_spill_index.cpp
 nu_stat_SOURCES = nu_stat.c
+nfile_link_SOURCES = nfile_link.c
 
 EXTRA_DIST = README.md \
              batch.sh

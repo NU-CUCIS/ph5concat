@@ -109,9 +109,9 @@ usage(char *progname)
 #define USAGE   "\
   [-h]     print this command usage message\n\
   [-v]     verbose mode (default: off)\n\
-  -i file  name of input text file (required)\n\n\
+  -i file  name of input text file (required)\n\
   -o file  name of output HDF5 file (required)\n\n\
-  This utility program creates a master file and adds groups of all input\n\n\
+  This utility program creates a master file and adds groups of all input\n\
   files as external links, The group names must be all distinct. \n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 

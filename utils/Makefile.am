@@ -21,7 +21,8 @@ noinst_PROGRAMS = rechunk \
                   add_spill_index \
                   nu_stat \
                   nfile_link \
-                  nfile_merge
+                  nfile_merge \
+                  nfile_ocopy
 
 rechunk_SOURCES = rechunk.c
 add_key_SOURCES = add_key.cpp
@@ -31,6 +32,7 @@ add_spill_index_SOURCES = add_spill_index.cpp
 nu_stat_SOURCES = nu_stat.c
 nfile_link_SOURCES = nfile_link.c
 nfile_merge_SOURCES = nfile_merge.c
+nfile_ocopy_SOURCES = nfile_ocopy.c
 
 EXTRA_DIST = README.md \
              batch.sh

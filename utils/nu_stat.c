@@ -14,6 +14,8 @@
 #include <assert.h> /* assert() */
 #include <sys/types.h>
 #include <sys/stat.h> /* stat() */
+#include <libgen.h> /* dirname() */
+#include <errno.h>
 
 #include <hdf5.h>
 
@@ -44,6 +46,8 @@ typedef struct {
     int          gid;         /* array index point to groups[] */
     hsize_t      num_groups;  /* number of groups */
     group_meta  *groups;      /* metadata of groups */
+    int          num_links;   /* number of unique external links */
+    char       **ext_links;   /* path names of external links */
     char        *evt_group;   /* event ID dataset's group name */
     char        *evt_dset;    /* event ID dataset name */
     hsize_t      num_events;  /* number of event IDs */
@@ -231,6 +235,19 @@ fn_exit:
      */
 }
 
+static
+int search_link_path(char       **str_array,
+                     int          num,
+                     const char  *str)
+{
+    int i;
+    for (i=0; i<num; i++)
+        if (strcmp(str_array[i], str) == 0)
+            return 1; /* found */
+
+    return 0; /* not found */
+}
+
 /*----< link_metadata() >----------------------------------------------------*/
 /* call back function used in H5Ovisit() */
 static
@@ -251,6 +268,25 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
         /* each external link points to a group in an external file */
         grp = H5Oopen(loc_id, name, H5P_DEFAULT);
         if (grp < 0) HANDLE_ERROR("H5Oopen", name)
+
+        unsigned int flags;
+        char *linkbuf;
+        const char *link_path;
+        linkbuf = (char*) calloc(info->u.val_size+1, 1);
+        err = H5Lget_val(loc_id, name, linkbuf, info->u.val_size, H5P_DEFAULT);
+        if (err < 0) HANDLE_ERROR("H5Lget_val", name);
+        err = H5Lunpack_elink_val(linkbuf, info->u.val_size, &flags, &link_path, NULL);
+        if (err < 0) HANDLE_ERROR("H5Lunpack_elink_val", name);
+        if (verbose) printf("group %s: external link: %s\n",name,link_path);
+
+        /* search if link_path already exists */
+        if (it_op->num_links == 0) {
+            it_op->ext_links[0] = strdup(link_path);
+            it_op->num_links++;
+        }
+        else if (search_link_path(it_op->ext_links, it_op->num_links, link_path) == 0)
+            it_op->ext_links[it_op->num_links++] = strdup(link_path);
+        free(linkbuf);
 
         /* inquire number of datasets in the external group */
         err = H5Gget_info(grp, &grp_info);
@@ -469,6 +505,9 @@ int main(int argc, char **argv)
     it_op.num_groups = grp_info.nlinks;
     if (verbose) printf("Number of groups = %llu\n", it_op.num_groups);
 
+    it_op.num_links = 0;
+    it_op.ext_links = (char**) calloc(it_op.num_groups, sizeof(char*));
+
     it_op.groups = (group_meta*) calloc(it_op.num_groups, sizeof(group_meta));
     it_op.gid = -1;
 
@@ -636,12 +675,31 @@ fn_exit:
     median_grp_size = group_sizes[(it_op.num_groups+1)/2];
     histogram(group_sizes, it_op.num_groups, bin_width, "group_size_hist.csv");
 
-    stat(fname, &file_stat);
-    off_t fsize = file_stat.st_size;
+    /* obtain file size, including external links */
+    char *in_dir = dirname(fname);
+    off_t fsize = 0;
+    if (stat(fname, &file_stat) < 0)
+        printf("Error: stat on file %s (%s)\n",fname,strerror(errno));
+    else
+        fsize = file_stat.st_size;
+    for (i=0; i<it_op.num_links; i++) {
+        char path[1024];
+        if (it_op.ext_links[i][0] == '/') /* absolute path name */
+            strcpy(path, it_op.ext_links[i]);
+        else /* relative path to input file name */
+            sprintf(path, "%s/%s", in_dir, it_op.ext_links[i]);
+        if (stat(path, &file_stat) < 0) {
+            printf("Error: stat on file %s (%s)\n", path, strerror(errno));
+            break;
+        }
+        fsize += file_stat.st_size;
+        free(it_op.ext_links[i]);
+    }
 
     if (err_exit == 0) {
-        printf("input file name                   = %s\n",fname);
-        printf("input file size                   = %12ld B = %8.1f MiB = %5.1f GiB\n",
+        printf("input HDF5 file name              = %s\n",fname);
+        printf("number of HDF5 external links     = %12d\n",it_op.num_links);
+        printf("input file size, including links  = %12ld B = %8.1f MiB = %5.1f GiB\n",
                fsize, (float)fsize/1048576.0, (float)fsize/1073741824.0);
         printf("total dataset size                = %12.f B = %8.1f MiB = %5.1f GiB\n",
                total_dset_size, total_dset_size/1048576.0, total_dset_size/1073741824.0);
@@ -668,6 +726,7 @@ fn_exit:
     }
 
     free(group_sizes);
+    free(it_op.ext_links);
     if (it_op.groups != NULL) free(it_op.groups);
     if (evt_dset != NULL) free(evt_dset);
     if (it_op.evt_group != NULL) free(it_op.evt_group);

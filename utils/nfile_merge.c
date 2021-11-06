@@ -2,6 +2,24 @@
  * Copyright (C) 2021, Northwestern University
  * See COPYRIGHT notice in top-level directory.
  */
+/*
+ * Note this program fails to work if using HDF5 1.12.1.
+ * It appears to me HDF5 1.12.1 needs H5Dwrite_chunk() to be called in
+ * collective more in order to work correctly. There are two issues:
+ * 1. Hangs at H5Fclose() - MPI_File_set_size() is called inside of H5Fclose()
+ *    but the implementation of subroutine H5FD__mpio_truncate() in file
+ *    hdf5/src/H5FDmpio.c first broadcasts root's file size and then if it
+ *    disgrees withthe file size in each process, then MPI_File_set_size() will
+ *    be called.  Note MPI_File_set_size() is collactive, thus causing the
+ *    program to hang.  See https://github.com/HDFGroup/hdf5/issues/1155
+ * 2. Assuming H5Dwrite_chunk() seeks a file location that is large enough to
+ *    store the compressed chunk, such seeking from multiple processes
+ *    concurrently can cause conflicts, such as the same location obtained by
+ *    two or more processes. This results in multiple processes writing their
+ *    chunks to the same location, corrupting the data chunk. Error occurs in
+ *    file hdf5-1.12.0/src/H5Zdeflate.c at line 126, error code Z_DATA_ERROR,
+ *    and ZLIB message: "incorrect header check".
+ */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -218,7 +236,7 @@ herr_t copy_data(hid_t             loc_id,        /* object ID */
                 if (err < 0) HANDLE_ERROR("H5Dget_chunk_storage_size", name)
 
 #if 0
-                H5DO APIs are high-level APIs, requiring -lhdf5_hl
+                /* H5DO APIs are high-level APIs, requiring -lhdf5_hl */
 
                 /* read a chunk in compressed form */
                 err = H5DOread_chunk(dset, dxpl_id, chunk_off, &filter_mask, buf);
@@ -239,6 +257,16 @@ herr_t copy_data(hid_t             loc_id,        /* object ID */
                 if (err < 0) HANDLE_ERROR("H5Dwrite_chunk", name)
 #endif
 
+#ifdef DEBUG
+if (!strcmp(name, "r4955_sr19_evt977/edge_index_3d_y")){
+printf("Dataset %s = in_chunk_dims=%llu %lld\n",name,in_chunk_dims[0],in_chunk_dims[1]);
+haddr_t addr;
+hsize_t csize;
+err = H5Dget_chunk_info_by_coord(dset, chunk_off, NULL, &addr, &csize);
+if (err < 0) HANDLE_ERROR("H5Dget_chunk_info_by_coord ", "r4955_sr19_evt977/edge_index_3d_y")
+printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%llu\n",addr,csize);
+}
+#endif
                 /* move on to next chunk */
                 chunk_off[0] += in_chunk_dims[0];
             }
@@ -328,10 +356,10 @@ static void
 usage(char *progname)
 {
 #define USAGE   "\
-  [-h]         print this command usage message\n\
-  [-v]         verbose mode (default: off)\n\
-  -i file      name of input text file containing file names to be merged (required)\n\n\
-  -o file      name of output HDF5 file (required)\n\n\
+  [-h]     print this command usage message\n\
+  [-v]     verbose mode (default: off)\n\
+  -i file  name of input text file containing file names to be merged (required)\n\
+  -o file  name of output HDF5 file (required)\n\n\
   This utility program merge multiple HDF5 files into one\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
@@ -400,10 +428,14 @@ int main(int argc, char **argv)
     /* count number of input files */
     num_files = 0;
     while (fgets(line, 1024, fd)) {
+        if (line[strlen(line)-1] == '\n')
+            line[strlen(line)-1] = '\0';
         if (strlen(line) == 0)
             continue; /* skip empty lines */
         if (line[0] == '#')
             continue; /* skip comment line (start with #) */
+        if (line[0] == '\n')
+            continue; /* skip new line */
         num_files++;
     }
     if (verbose && rank == 0) printf("Number of input files = %d\n",num_files);
@@ -418,6 +450,8 @@ int main(int argc, char **argv)
     i = 0;
     while (fgets(line, 1024, fd)) {
         char *tail;
+        if (line[strlen(line)-1] == '\n')
+            line[strlen(line)-1] = '\0';
         if (strlen(line) == 0)
             continue; /* skip empty lines */
         if (line[0] == '#')
@@ -448,13 +482,26 @@ int main(int argc, char **argv)
     err = H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, info);
     if (err < 0) HANDLE_ERROR("H5Pset_fapl_mpio", outfname)
     /* set collective mode for metadata writes */
-    err = H5Pset_coll_metadata_write(fapl_id, false);
+    err = H5Pset_coll_metadata_write(fapl_id, true);
     if (err < 0) HANDLE_ERROR("H5Pset_coll_metadata_write", outfname)
 
     /* collectively create output file */
     it_op.out_fd = H5Fcreate(outfname, H5F_ACC_EXCL, H5P_DEFAULT, fapl_id);
     if (it_op.out_fd < 0)
         HANDLE_ERROR("H5Fcreate in exclusive mode ", outfname)
+
+    /* Disable metadata caching. Otherwise H5Dwrite_chunk or H5Fclose will hang
+     */
+    H5AC_cache_config_t config;
+    config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
+    err = H5Fget_mdc_config(it_op.out_fd, &config);
+    if (err < 0) HANDLE_ERROR("H5Fget_mdc_config", outfname)
+    config.evictions_enabled = 0;
+    config.incr_mode = H5C_incr__off;
+    config.decr_mode = H5C_decr__off;
+    config.flash_incr_mode = H5C_flash_incr__off;
+    err = H5Fset_mdc_config(it_op.out_fd, &config);
+    if (err < 0) HANDLE_ERROR("H5Fset_mdc_config", outfname)
 
     /* all processes open each input file and collectively create groups and
      * datasets in the shared outout file.
@@ -481,6 +528,7 @@ int main(int argc, char **argv)
         if (it_op.err < 0) HANDLE_ERROR("H5Ovisit", fname)
     }
 
+#if 0
     check_h5_objects(outfname, it_op.out_fd);
     err = H5Fclose(it_op.out_fd);
     if (err < 0) HANDLE_ERROR("H5Fclose ",outfname)
@@ -489,22 +537,9 @@ int main(int argc, char **argv)
     it_op.out_fd = H5Fopen(outfname, H5F_ACC_RDWR, fapl_id);
     if (it_op.out_fd < 0)
         HANDLE_ERROR("H5Fopen in RDWR mode ", outfname)
-
+#endif
     err = H5Pclose(fapl_id);
     if (err < 0) HANDLE_ERROR("H5Pclose", outfname)
-
-    /* Disable metadata caching. Otherwise H5Dwrite_chunk or H5Fclose will hang
-     */
-    H5AC_cache_config_t config;
-    config.version = H5AC__CURR_CACHE_CONFIG_VERSION;
-    err = H5Fget_mdc_config(it_op.out_fd, &config);
-    if (err < 0) HANDLE_ERROR("H5Fget_mdc_config", outfname)
-    config.evictions_enabled = 0;
-    config.incr_mode = H5C_incr__off;
-    config.decr_mode = H5C_decr__off;
-    config.flash_incr_mode = H5C_flash_incr__off;
-    err = H5Fset_mdc_config(it_op.out_fd, &config);
-    if (err < 0) HANDLE_ERROR("H5Fset_mdc_config", outfname)
 
     /* calculate how many files to be assigned to each process for copying */
     my_num_files = num_files / nprocs;
@@ -542,6 +577,28 @@ int main(int argc, char **argv)
         err = H5Fclose(in_fd[i]);
         if (err < 0) HANDLE_ERROR("H5Fclose ", fname)
     }
+
+#ifdef DEBUG
+hid_t dset = H5Dopen(it_op.out_fd, "/r4955_sr19_evt977/edge_index_3d_y", H5P_DEFAULT);
+if (dset < 0) HANDLE_ERROR("H5Dopen", "r4955_sr19_evt977/edge_index_3d_y")
+hsize_t chunk_off[2] = {0,0};
+haddr_t addr;
+hsize_t csize;
+err = H5Dget_chunk_info_by_coord(dset, chunk_off, NULL, &addr, &csize);
+if (err < 0) HANDLE_ERROR("H5Dget_chunk_info_by_coord ", "r4955_sr19_evt977/edge_index_3d_y")
+printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%llu\n",addr,csize);
+
+char *buf=(char*)malloc(2*229*sizeof(long long));
+if (rank == 0) {
+// unsigned int filter_mask;
+// err = H5DOread_chunk(dset, H5P_DEFAULT, chunk_off, &filter_mask, buf);
+err = H5Dread(dset, H5T_STD_I64LE, H5S_ALL, H5S_ALL, H5P_DEFAULT, buf);
+if (err < 0) HANDLE_ERROR("H5Dread ", "r4955_sr19_evt977/edge_index_3d_y")
+}
+free(buf);
+err = H5Dclose(dset);
+if (err < 0) HANDLE_ERROR("H5Dclose", "r4955_sr19_evt977/edge_index_3d_y")
+#endif
 
     check_h5_objects(outfname, it_op.out_fd);
     err = H5Fclose(it_op.out_fd);

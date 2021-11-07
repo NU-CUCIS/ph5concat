@@ -39,6 +39,7 @@ typedef struct {
     int       num_dsets;      /* number of datasets in this group */
     hsize_t   sum_row_size;   /* size sum of a row of all datasets */
     hsize_t   sum_dset_size;  /* size sum of all datasets */
+    hsize_t   num_edges;      /* number of edges in all datasets */
 } group_meta;
 
 /* parameters to be passed to the call back function */
@@ -131,6 +132,13 @@ herr_t dataset_metadata(hid_t       loc_id,
 
     /* accumulate all dataset sizes before compression */
     it_op->groups[it_op->gid].sum_dset_size += nelems * type_size;
+
+    /* collect edge dimensions from dataset */
+    if (strcmp(dataset_name,"edge_index") == 0) {
+	if (ndims == 1) { it_op->groups[it_op->gid].num_edges += dims[0]; }
+	else if (ndims == 2) { it_op->groups[it_op->gid].num_edges += dims[1]; }
+	//printf("num_edge: %lld\n", it_op->groups[it_op->gid].num_edges);
+    }
 
     /* Retrieve input dataset's creation property list */
     r_dcpl = H5Dget_create_plist(dset);
@@ -453,46 +461,6 @@ usage(char *progname)
 
     printf("Usage: %s [-h|-v|-e name|-b num] file\n%s\n", progname, USAGE);
 }
-/*----< helper functions() >-------------------------------------------------------------*/
-int cmpfunc (const void * a, const void * b) {
-   return ( *(hsize_t*)a - *(hsize_t*)b );
-}
-void histogram(hsize_t values[], int n, int bin_size)
-{
-    int i = 0, j = 0; 
-
-    /* Initialize frequency array */
-    int maxval = 0; for (i=0; i<n; i++) { if (values[i] > maxval) maxval = values[i]; }
-    int arrsize = maxval / bin_size; 
-    hsize_t* frequency = (hsize_t*) calloc(arrsize, sizeof(hsize_t)); 
-
-    /* Create histogram array */
-    int round = bin_size / 2; 
-    int index;
-    for (i = 0 ; i < n ; i++) {
-	int x = values[i];
-	if (x % bin_size >= round) {
-	    index = (x + bin_size) - (x % bin_size);
-	    index /= bin_size;
-	}
-	else { 
-	    index = x - (x % bin_size); 
-	    index /= bin_size;
-	}
-	if (index >= arrsize) { index = arrsize - 1; }
-	assert(index < arrsize);
-	frequency[index]++; 
-    }
-    
-    /* Write histogram array to CSV file */
-    FILE *fp;
-    fp = fopen("histogram.csv", "w+");
-    for (i = 0; i < arrsize; i++) {
-	fprintf(fp, "%d, %llu\n", i, frequency[i]);
-    }
-
-    free(frequency);
-}
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
@@ -502,11 +470,7 @@ int main(int argc, char **argv)
     herr_t err;
     hid_t fd=-1;
     hsize_t non_empty_evts;
-<<<<<<< HEAD
     float max_evt_size, min_evt_size, median_evt_size, median_grp_size;
-=======
-    float max_evt_size, min_evt_size, median_evt_size;
->>>>>>> 8106b57... find median file size
     H5G_info_t grp_info;
     op_data it_op;
     struct stat file_stat;
@@ -583,8 +547,6 @@ int main(int argc, char **argv)
         }
         else { /* check if the event ID dataset exists */
             htri_t dset_exist = H5Lexists(fd, evt_dset, H5P_DEFAULT);
-            printf("MIN single event data size        = %12.f B = %8.1f KiB = %5.1f MiB\n",
-                   min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
             if (dset_exist < 0) HANDLE_ERROR("H5Lexists", evt_dset)
             if (dset_exist == 0) {
                 printf("Warning: dataset '%s' does not exist.\n", evt_dset);
@@ -681,7 +643,7 @@ int main(int argc, char **argv)
             free(seq_cnt);
 
             err = H5Dclose(dset);
-            if (err < 0) HANDLE_ERROR("H5Dclose", dset_name);
+            if (err < 0) HANDLE_ERROR("H5Dclose", dset_name)
         }
 
         max_evt_size = 0;
@@ -697,9 +659,6 @@ int main(int argc, char **argv)
         qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
         median_evt_size = it_op.evt_size[(it_op.num_events+1)/2];
     }
-    /* Sort event sizes array to create histogram */ 
-    qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
-    median_evt_size = it_op.evt_size[(it_op.num_events+1)/2]; 
 
 fn_exit:
     if (fd >= 0) {
@@ -708,9 +667,11 @@ fn_exit:
         if (err < 0) printf("Error at line %d: H5Fclose\n",__LINE__);
     }
 
-    hsize_t total_num_dsets=0, *group_sizes;
+    hsize_t total_num_dsets=0, *group_sizes, *edge_counts;
     float total_dset_size=0, max_grp_size, min_grp_size;
     group_sizes = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
+    edge_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
+    //hit_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     max_grp_size = 0;
     min_grp_size = INT_MAX;
     for (i=0; i<it_op.num_groups; i++) {
@@ -719,10 +680,16 @@ fn_exit:
         max_grp_size = MAX(max_grp_size, it_op.groups[i].sum_dset_size);
         min_grp_size = MIN(min_grp_size, it_op.groups[i].sum_dset_size);
         group_sizes[i] = it_op.groups[i].sum_dset_size;
+        edge_counts[i] = it_op.groups[i].num_edges;
+        //hit_counts[i] = it_op.groups[i].num_edges;
     }
     qsort(group_sizes, it_op.num_groups, sizeof(hsize_t), cmpfunc);
     median_grp_size = group_sizes[(it_op.num_groups+1)/2];
     histogram(group_sizes, it_op.num_groups, bin_width, "group_size_hist.csv");
+
+    /* sort and create edge count histogram array */
+    qsort(edge_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
+    histogram(edge_counts, it_op.num_groups, 1000, "edge_count_hist.csv");
 
     /* obtain file size, including external links */
     char *in_dir = dirname(fname);

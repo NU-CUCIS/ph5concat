@@ -675,7 +675,8 @@ fn_exit:
 
     hsize_t total_num_dsets=0, *group_sizes, *edge_counts, *hit_counts;
     float total_dset_size=0, max_grp_size, min_grp_size, median_grp_size, 
-			max_edge_count, min_edge_count, median_edge_count;
+			max_edge_count, min_edge_count, median_edge_count,
+			max_hit_count, min_hit_count, median_hit_count;
     group_sizes = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     edge_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     hit_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
@@ -683,6 +684,8 @@ fn_exit:
     min_grp_size = INT_MAX;
     max_edge_count = 0;
     min_edge_count = INT_MAX;
+    max_hit_count = 0;
+    min_hit_count = INT_MAX;
     for (i=0; i<it_op.num_groups; i++) {
         total_num_dsets += it_op.groups[i].num_dsets;
         total_dset_size += it_op.groups[i].sum_dset_size;
@@ -692,7 +695,9 @@ fn_exit:
         max_edge_count = MAX(max_edge_count, it_op.groups[i].num_edges);
         min_edge_count = MIN(min_edge_count, it_op.groups[i].num_edges);
         edge_counts[i] = it_op.groups[i].num_edges;
-        hit_counts[i] = it_op.groups[i].num_edges;
+        max_hit_count = MAX(max_hit_count, it_op.groups[i].num_hits);
+        min_hit_count = MIN(min_hit_count, it_op.groups[i].num_hits);
+        hit_counts[i] = it_op.groups[i].num_hits;
     }
     /* sort and find median of group sizes */
     qsort(group_sizes, it_op.num_groups, sizeof(hsize_t), cmpfunc);
@@ -706,8 +711,8 @@ fn_exit:
    
     /* sort and create hit count histogram array */  
     qsort(hit_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
-    //for (i=0; i < it_op.num_groups; i++) printf("%d ", hit_counts[i]);
-    histogram(edge_counts, it_op.num_groups, 1000, "hit_count_hist.csv");
+    median_hit_count = hit_counts[(it_op.num_groups+1)/2];
+    histogram(hit_counts, it_op.num_groups, 1000, "hit_count_hist.csv");
 
     /* obtain file size, including external links */
     char *in_dir = dirname(fname);
@@ -748,6 +753,9 @@ fn_exit:
         printf("MAXIMUM edge count    = %12.f\n", max_edge_count);
         printf("MINIMUM edge count    = %12.f\n", min_edge_count);
         printf("MEDIAN edge count    = %12.f\n", median_edge_count);
+        printf("MAXIMUM hit count    = %12.f\n", max_hit_count);
+        printf("MINIMUM hit count    = %12.f\n", min_hit_count);
+        printf("MEDIAN hit count    = %12.f\n", median_hit_count);
         if (evt_dset != NULL) {
             printf("event ID dataset                  = %s\n", evt_dset);
             printf("Total number of event IDs         = %12llu\n", it_op.num_events);

@@ -135,14 +135,16 @@ herr_t dataset_metadata(hid_t       loc_id,
     it_op->groups[it_op->gid].sum_dset_size += nelems * type_size;
 
     /* collect edge dimensions from dataset */
-    if (strcmp(dataset_name,"edge_index") == 0) {
+    if (strncmp(dataset_name,"edge_index", strlen("edge_index")) == 0) {
+        /* string compare only the prefix name */
 	if (ndims == 1) { it_op->groups[it_op->gid].num_edges += dims[0]; }
 	else if (ndims == 2) { it_op->groups[it_op->gid].num_edges += dims[1]; }
 	//printf("num_edge: %lld\n", it_op->groups[it_op->gid].num_edges);
     }
 
     /* collect number of hits from each group */
-    if (strcmp(dataset_name,"y") == 0) {
+    if (dataset_name[0] == 'y') {
+        /* string compare only the prefix name */
 	it_op->groups[it_op->gid].num_hits += dims[0];
     }
 
@@ -715,24 +717,27 @@ fn_exit:
     histogram(hit_counts, it_op.num_groups, 1000, "hit_count_hist.csv");
 
     /* obtain file size, including external links */
-    char *in_dir = dirname(fname);
     off_t fsize = 0;
     if (stat(fname, &file_stat) < 0)
-        printf("Error: stat on file %s (%s)\n",fname,strerror(errno));
-    else
+        fprintf(stderr,"Error: stat on file %s (%s)\n",fname,strerror(errno));
+    else {
         fsize = file_stat.st_size;
-    for (i=0; i<it_op.num_links; i++) {
-        char path[1024];
-        if (it_op.ext_links[i][0] == '/') /* absolute path name */
-            strcpy(path, it_op.ext_links[i]);
-        else /* relative path to input file name */
-            sprintf(path, "%s/%s", in_dir, it_op.ext_links[i]);
-        if (stat(path, &file_stat) < 0) {
-            printf("Error: stat on file %s (%s)\n", path, strerror(errno));
-            break;
+        for (i=0; i<it_op.num_links; i++) {
+            char path[1024];
+            if (it_op.ext_links[i][0] == '/') /* absolute path name */
+                strcpy(path, it_op.ext_links[i]);
+            else { /* relative path to input file name */
+                strcpy(path, fname);
+                dirname(path); /* remove file name, keep only directory name */
+                sprintf(path+strlen(path), "/%s", it_op.ext_links[i]);
+            }
+            if (stat(path, &file_stat) < 0) {
+                printf("Error: stat on file %s (%s)\n", path, strerror(errno));
+                break;
+            }
+            fsize += file_stat.st_size;
+            free(it_op.ext_links[i]);
         }
-        fsize += file_stat.st_size;
-        free(it_op.ext_links[i]);
     }
 
     if (err_exit == 0) {

@@ -54,6 +54,8 @@ typedef struct {
     char        *evt_dset;    /* event ID dataset name */
     hsize_t      num_events;  /* number of event IDs */
     hsize_t     *evt_size;    /* data size per event */
+    int          hasEdges;    /* whether input file contains edges */
+    int          hasHits;     /* whether input file contains hints */
     herr_t       err;
 } op_data;
 
@@ -137,15 +139,18 @@ herr_t dataset_metadata(hid_t       loc_id,
     /* collect edge dimensions from dataset */
     if (strncmp(dataset_name,"edge_index", strlen("edge_index")) == 0) {
         /* string compare only the prefix name */
-	if (ndims == 1) { it_op->groups[it_op->gid].num_edges += dims[0]; }
-	else if (ndims == 2) { it_op->groups[it_op->gid].num_edges += dims[1]; }
-	//printf("num_edge: %lld\n", it_op->groups[it_op->gid].num_edges);
+        if (ndims == 1)
+            it_op->groups[it_op->gid].num_edges += dims[0];
+        else if (ndims == 2)
+            it_op->groups[it_op->gid].num_edges += dims[1];
+        it_op->hasEdges = 1;
     }
 
     /* collect number of hits from each group */
     if (dataset_name[0] == 'y') {
         /* string compare only the prefix name */
-	it_op->groups[it_op->gid].num_hits += dims[0];
+        it_op->groups[it_op->gid].num_hits += dims[0];
+        it_op->hasHits = 1;
     }
 
     /* Retrieve input dataset's creation property list */
@@ -413,42 +418,33 @@ int cmpfunc (const void * a, const void * b) {
 }
 
 /*----< histogram() >--------------------------------------------------------*/
-void histogram(hsize_t values[], int n, int bin_size, char *fname)
+static
+void histogram(hsize_t  num,       /* number of elements in array values */
+               hsize_t *values,    /* already sorted in an increasing order */
+               int      bin_width,
+               char    *out_fname)
 {
-    int i;
+    FILE *fp;
+    hsize_t i;
+
+    /* calculate number of bins */
+    hsize_t num_bins = values[num-1] / bin_width;
+    if (values[num-1] % bin_width) num_bins++;
 
     /* Initialize frequency array */
-    hsize_t maxval = 0;
-    for (i=0; i<n; i++) { if (values[i] > maxval) maxval = values[i]; }
+    hsize_t* frequency = (hsize_t*) calloc(num_bins, sizeof(hsize_t));
 
-    hsize_t arrsize = maxval / bin_size;
-    hsize_t* frequency = (hsize_t*) calloc(arrsize, sizeof(hsize_t));
-
-    /* Create histogram array */
-    hsize_t round = bin_size / 2;
-    hsize_t index;
-    for (i = 0 ; i < n ; i++) {
-        hsize_t x = values[i];
-        if (x % bin_size >= round) {
-            index = (x + bin_size) - (x % bin_size);
-            index /= bin_size;
-        }
-        else {
-            index = x - (x % bin_size);
-            index /= bin_size;
-        }
-        if (index >= arrsize) { index = arrsize - 1; }
-        assert(index >= 0);
-        assert(index < arrsize);
-        frequency[index]++;
+    /* Create histogram */
+    for (i=0; i<num; i++) {
+        int bin = values[i] / bin_width;
+        frequency[bin]++;
     }
 
     /* Write histogram array to CSV file */
-    FILE *fp;
-    fp = fopen(fname, "w");
-    for (i = 0; i < arrsize; i++) {
-        fprintf(fp, "%d, %llu\n", i, frequency[i]);
-    }
+    fp = fopen(out_fname, "w");
+    for (i = 0; i < num_bins; i++)
+        fprintf(fp, "%llu, %llu\n", i, frequency[i]);
+
     fclose(fp);
 
     free(frequency);
@@ -463,17 +459,20 @@ usage(char *progname)
   [-v]         verbose mode (default: off)\n\
   [-e name]    event ID dataset name\n\
   [-b num]     bin width for creating event size histogram (default: 100000)\n\
+  [-t num]     bin width for creating hit count histogram (default: 100)\n\
+  [-d num]     bin width for creating edge count histogram (default: 100)\n\
   file         input file name (required)\n\n\
   This utility program prints the statistics of an input HDF5 file\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-e name|-b num] file\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-e name|-b num|-t num|-d num] file\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    int i, j, k, c, err_exit=0, bin_width=100000;
+    int i, j, k, c, err_exit=0;
+    int event_bin_width=100000, hit_bin_width=100, edge_bin_width=100;
     char *fname=NULL, *evt_dset=NULL;
     herr_t err;
     hid_t fd=-1;
@@ -486,7 +485,7 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hve:b:")) != -1)
+    while ((c = getopt(argc, argv, "hve:b:t:d:")) != -1)
         switch(c) {
             case 'v': verbose = 1;
                       break;
@@ -494,7 +493,11 @@ int main(int argc, char **argv)
                       return 0;
             case 'e': evt_dset = strdup(optarg);
                       break;
-            case 'b': bin_width = atoi(optarg);
+            case 'b': event_bin_width = atoi(optarg);
+                      break;
+            case 't': hit_bin_width = atoi(optarg);
+                      break;
+            case 'd': edge_bin_width = atoi(optarg);
                       break;
             default : usage(argv[0]);
                       return 1;
@@ -676,9 +679,9 @@ fn_exit:
     }
 
     hsize_t total_num_dsets=0, *group_sizes, *edge_counts, *hit_counts;
-    float total_dset_size=0, max_grp_size, min_grp_size, median_grp_size, 
-			max_edge_count, min_edge_count, median_edge_count,
-			max_hit_count, min_hit_count, median_hit_count;
+    hsize_t max_edge_count, min_edge_count, median_edge_count,
+            max_hit_count,  min_hit_count,  median_hit_count;
+    float total_dset_size=0, max_grp_size, min_grp_size, median_grp_size; 
     group_sizes = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     edge_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
     hit_counts = (hsize_t*) malloc(it_op.num_groups * sizeof(hsize_t));
@@ -694,27 +697,33 @@ fn_exit:
         max_grp_size = MAX(max_grp_size, it_op.groups[i].sum_dset_size);
         min_grp_size = MIN(min_grp_size, it_op.groups[i].sum_dset_size);
         group_sizes[i] = it_op.groups[i].sum_dset_size;
-        max_edge_count = MAX(max_edge_count, it_op.groups[i].num_edges);
-        min_edge_count = MIN(min_edge_count, it_op.groups[i].num_edges);
-        edge_counts[i] = it_op.groups[i].num_edges;
-        max_hit_count = MAX(max_hit_count, it_op.groups[i].num_hits);
-        min_hit_count = MIN(min_hit_count, it_op.groups[i].num_hits);
-        hit_counts[i] = it_op.groups[i].num_hits;
+        if (it_op.hasEdges) {
+            max_edge_count = MAX(max_edge_count, it_op.groups[i].num_edges);
+            min_edge_count = MIN(min_edge_count, it_op.groups[i].num_edges);
+            edge_counts[i] = it_op.groups[i].num_edges;
+        }
+        if (it_op.hasHits) {
+            max_hit_count = MAX(max_hit_count, it_op.groups[i].num_hits);
+            min_hit_count = MIN(min_hit_count, it_op.groups[i].num_hits);
+            hit_counts[i] = it_op.groups[i].num_hits;
+        }
     }
     /* sort and find median of group sizes */
     qsort(group_sizes, it_op.num_groups, sizeof(hsize_t), cmpfunc);
     median_grp_size = group_sizes[(it_op.num_groups+1)/2];
-    histogram(group_sizes, it_op.num_groups, bin_width, "group_size_hist.csv");
+    histogram(it_op.num_groups, group_sizes, event_bin_width, "group_size_hist.csv");
 
-    /* sort and find median of edge counts */
-    qsort(edge_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
-    median_edge_count = edge_counts[(it_op.num_groups+1)/2];
-    histogram(edge_counts, it_op.num_groups, 1000, "edge_count_hist.csv");
+    if (it_op.hasEdges) {
+        /* sort and find median of edge counts */
+        qsort(edge_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
+        median_edge_count = edge_counts[(it_op.num_groups+1)/2];
+    }
    
-    /* sort and create hit count histogram array */  
-    qsort(hit_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
-    median_hit_count = hit_counts[(it_op.num_groups+1)/2];
-    histogram(hit_counts, it_op.num_groups, 1000, "hit_count_hist.csv");
+    if (it_op.hasHits) {
+        /* sort and find median of hint counts */
+        qsort(hit_counts, it_op.num_groups, sizeof(hsize_t), cmpfunc);
+        median_hit_count = hit_counts[(it_op.num_groups+1)/2];
+    }
 
     /* obtain file size, including external links */
     off_t fsize = 0;
@@ -749,29 +758,56 @@ fn_exit:
                total_dset_size, total_dset_size/1048576.0, total_dset_size/1073741824.0);
         printf("number of groups in the file      = %12llu\n", it_op.num_groups);
         printf("total number of datasets          = %12llu\n", total_num_dsets);
-        printf("MAXIMAL single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
+        printf("MAXIMUM single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                max_grp_size, max_grp_size/1048576.0, max_grp_size/1073741824.0);
-        printf("MINIMAL single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
+        printf("MINIMUM single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                min_grp_size, min_grp_size/1048576.0, min_grp_size/1073741824.0);
         printf("MEDIAN  single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                median_grp_size, median_grp_size/1048576.0, median_grp_size/1073741824.0);
-        printf("MAXIMUM edge count    = %12.f\n", max_edge_count);
-        printf("MINIMUM edge count    = %12.f\n", min_edge_count);
-        printf("MEDIAN edge count    = %12.f\n", median_edge_count);
-        printf("MAXIMUM hit count    = %12.f\n", max_hit_count);
-        printf("MINIMUM hit count    = %12.f\n", min_hit_count);
-        printf("MEDIAN hit count    = %12.f\n", median_hit_count);
+        if (it_op.hasEdges) {
+            hsize_t num_bins;
+            char *name = "edge_count_hist.csv";
+            printf("MAXIMUM edge count in a graph     = %12llu\n", max_edge_count);
+            printf("MINIMUM edge count in a graph     = %12llu\n", min_edge_count);
+            printf("MEDIAN  edge count in a graph     = %12llu\n", median_edge_count);
+            histogram(it_op.num_groups, edge_counts, edge_bin_width, name);
+            num_bins = edge_counts[it_op.num_groups-1] / edge_bin_width;
+            if (edge_counts[it_op.num_groups-1] % edge_bin_width) num_bins++;
+            printf("Edge count histogram file         = %s\n", name);
+            printf("    histogram bin width           = %12d\n", edge_bin_width);
+            printf("    number of histogram bins      = %12llu\n", num_bins);
+        }
+        if (it_op.hasHits) {
+            hsize_t num_bins;
+            char *name = "hit_count_hist.csv";
+            printf("MAXIMUM hit  count in a graph     = %12llu\n", max_hit_count);
+            printf("MINIMUM hit  count in a graph     = %12llu\n", min_hit_count);
+            printf("MEDIAN  hit  count in a graph     = %12llu\n", median_hit_count);
+            histogram(it_op.num_groups, hit_counts, hit_bin_width, name);
+            num_bins = hit_counts[it_op.num_groups-1] / hit_bin_width;
+            if (hit_counts[it_op.num_groups-1] % hit_bin_width) num_bins++;
+            printf("Hit count histogram file          = %s\n", name);
+            printf("    histogram bin width           = %12d\n", hit_bin_width);
+            printf("    number of histogram bins      = %12llu\n", num_bins);
+        }
         if (evt_dset != NULL) {
+            hsize_t num_bins;
+            char *name = "event_size_hist.csv";
             printf("event ID dataset                  = %s\n", evt_dset);
             printf("Total number of event IDs         = %12llu\n", it_op.num_events);
             printf("Total number of non-empty events  = %12llu\n", non_empty_evts);
-            printf("MAXIMAL single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MAXIMUM single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
                    max_evt_size, max_evt_size/1024.0, max_evt_size/1048576.0);
-            printf("MINIMAL single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MINIMUM single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
                    min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
             printf("MEDIAN  single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
                    median_evt_size, median_evt_size/1024.0, median_evt_size/1048576.0);
-            histogram(it_op.evt_size, it_op.num_events, bin_width, "event_size_hist.csv");
+            histogram(it_op.num_events, it_op.evt_size, event_bin_width, name);
+            num_bins = it_op.evt_size[it_op.num_events-1] / event_bin_width;
+            if (it_op.evt_size[it_op.num_events-1] % event_bin_width) num_bins++;
+            printf("Event size histogram file         = %s\n", name);
+            printf("    histogram bin width           = %12d\n", event_bin_width);
+            printf("    number of histogram bins      = %12llu\n", num_bins);
         }
     }
 

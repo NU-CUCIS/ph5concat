@@ -476,8 +476,7 @@ int main(int argc, char **argv)
     char *fname=NULL, *evt_dset=NULL;
     herr_t err;
     hid_t fd=-1;
-    hsize_t non_empty_evts;
-    float max_evt_size, min_evt_size, median_evt_size;
+    hsize_t non_empty_evts, max_evt_size, min_evt_size, median_evt_size;
     H5G_info_t grp_info;
     op_data it_op;
     struct stat file_stat;
@@ -660,15 +659,19 @@ int main(int argc, char **argv)
         max_evt_size = 0;
         min_evt_size = LONG_MAX;
         non_empty_evts = 0;
+        /* pack it_op.evt_size[] by removing empty events */
+        j = 0;
         for (i=0; i<it_op.num_events; i++) {
             if (it_op.evt_size[i] == 0) continue;
-            non_empty_evts++;
-            max_evt_size = MAX(max_evt_size, it_op.evt_size[i]);
-            min_evt_size = MIN(min_evt_size, it_op.evt_size[i]);
+            if (j < i) it_op.evt_size[j] = it_op.evt_size[i];
+            j++;
         }
+        non_empty_evts = j;
         /* Sort event sizes array to create histogram */
-        qsort(it_op.evt_size, it_op.num_events, sizeof(hsize_t), cmpfunc);
-        median_evt_size = it_op.evt_size[(it_op.num_events+1)/2];
+        qsort(it_op.evt_size, non_empty_evts, sizeof(hsize_t), cmpfunc);
+        max_evt_size = it_op.evt_size[non_empty_evts-1];
+        min_evt_size = it_op.evt_size[0];
+        median_evt_size = it_op.evt_size[(non_empty_evts+1)/2];
     }
 
 fn_exit:
@@ -796,15 +799,15 @@ fn_exit:
             printf("event ID dataset                  = %s\n", evt_dset);
             printf("Total number of event IDs         = %12llu\n", it_op.num_events);
             printf("Total number of non-empty events  = %12llu\n", non_empty_evts);
-            printf("MAXIMUM single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MAXIMUM single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
                    max_evt_size, max_evt_size/1024.0, max_evt_size/1048576.0);
-            printf("MINIMUM single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MINIMUM single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
                    min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
-            printf("MEDIAN  single event data size    = %12.f B = %8.1f KiB = %5.1f MiB\n",
+            printf("MEDIAN  single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
                    median_evt_size, median_evt_size/1024.0, median_evt_size/1048576.0);
-            histogram(it_op.num_events, it_op.evt_size, event_bin_width, name);
-            num_bins = it_op.evt_size[it_op.num_events-1] / event_bin_width;
-            if (it_op.evt_size[it_op.num_events-1] % event_bin_width) num_bins++;
+            histogram(non_empty_evts, it_op.evt_size, event_bin_width, name);
+            num_bins = it_op.evt_size[non_empty_evts-1] / event_bin_width;
+            if (it_op.evt_size[non_empty_evts-1] % event_bin_width) num_bins++;
             printf("Event size histogram file         = %s\n", name);
             printf("    histogram bin width           = %12d\n", event_bin_width);
             printf("    number of histogram bins      = %12llu\n", num_bins);

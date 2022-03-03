@@ -228,6 +228,13 @@ parallel data concatenation is important.
   End-to-end:                           314.8095
   ```
 
+## Publications
+* Sunwoo Lee, Kai-yuan Hou, Kewei Wang, Saba Sehrish, Marc Paterno,
+  James Kowalkowski, Quincey Koziol, Robert B. Ross, Ankit Agrawal,
+  Alok Choudhary, and Wei-keng Liao.
+  [A Case Study on Parallel HDF5 Dataset Concatenation For High Energy Physics Data Analysis](https://www.sciencedirect.com/science/article/abs/pii/S0167819121001174).
+  Parallel Computing, 110, May 2022. 
+
 ## Development Team:
    * Sunwoo Lee <<slz839@eecs.northwestern.edu>>
    * Wei-keng Liao <<wkliao@northwestern.edu>>

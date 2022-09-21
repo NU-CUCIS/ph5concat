@@ -363,6 +363,7 @@ int read_dataset_posix(hid_t       fd,
         if (profile == 2) group->read_t[dset_idx]=MPI_Wtime();
         lseek(posix_fd, addr, SEEK_SET);
         len = read(posix_fd, chunk_buf, size);
+        assert(len >= 0);
         if (profile == 2) group->read_t[dset_idx]=MPI_Wtime()-group->read_t[dset_idx];
 
         double timing = MPI_Wtime();

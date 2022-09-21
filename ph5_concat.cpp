@@ -377,6 +377,10 @@ int Concatenator::file_create()
     err = H5Pset_coll_metadata_write(fapl_id, true);
     if (err < 0) HANDLE_ERROR("H5Pset_coll_metadata_write")
 
+    /* use a large metadata block size */
+    err = H5Pset_meta_block_size(fapl_id, 4194304);
+    if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+
 #ifdef HAVE_ACCESS
     /* if access() is available, use it to check whether file already exists
      * rank 0 calls access() and broadcasts file_exist */
@@ -395,11 +399,21 @@ int Concatenator::file_create()
          * open the file
          */
         if (rank == 0) {
+            hid_t one_fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+            if (one_fapl_id < 0) HANDLE_ERROR("H5Pcreate")
+
+            /* use a large metadata block size */
+            err = H5Pset_meta_block_size(one_fapl_id, 4194304);
+            if (err < 0) HANDLE_ERROR("H5Pset_meta_block_size")
+
             /* create a new file */
             output_file_id = H5Fcreate(output_file_name.c_str(), H5F_ACC_EXCL,
-                                       H5P_DEFAULT, H5P_DEFAULT);
+                                       H5P_DEFAULT, one_fapl_id);
             if (output_file_id < 0)
                 HANDLE_ERROR(string("H5Fcreate in exclusive mode ") + output_file_name.c_str())
+
+            err = H5Pclose(one_fapl_id);
+            if (err < 0) HANDLE_ERROR("H5Pclose")
 
             /* rank 0 creates all the groups and datasets */
             for (ii=0; ii<num_groups; ii++) {

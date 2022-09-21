@@ -286,7 +286,7 @@ int main(int argc, char **argv)
     err = H5Dclose(run_id);
     if (err < 0) RETURN_ERROR("H5Dclose", "run");
 
-    if (verbose) printf("/spill/run dims (%llu, 1)\n", dset_dims[0]);
+    if (verbose) printf("/spill/run dims (%lu, 1)\n", dset_dims[0]);
 
     /* /spill/run should not be of zero-sized */
     if (dset_dims[0] == 0) RETURN_ERROR("Zero-sized group '/spill'", "run");

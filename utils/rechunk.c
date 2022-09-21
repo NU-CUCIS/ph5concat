@@ -681,7 +681,7 @@ int main(int argc, char **argv)
 
         err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
         if (err < 0) HANDLE_ERROR("H5Pget_meta_block_size", infile)
-        printf("metadata block size used by the input file is %lld\n",
+        printf("metadata block size used by the input file is %ld\n",
                meta_block_size);
         err = H5Pclose(fapl_id);
         if (err < 0) HANDLE_ERROR("H5Pclose", infile)
@@ -723,7 +723,7 @@ int main(int argc, char **argv)
     if (verbose) {
         err = H5Pget_meta_block_size(fapl_id, &meta_block_size);
         if (err < 0) HANDLE_ERROR("H5Pget_meta_block_size", outfile)
-        printf("metadata block size used by the output file is set to %lld\n",
+        printf("metadata block size used by the output file is set to %ld\n",
                meta_block_size);
     }
 
@@ -777,15 +777,15 @@ fn_exit:
         printf("Chunk caching for raw data           = %s\n",
                (raw_chunk_cache)?"enabled":"disabled");
         printf("I/O buffer size                      = %zd bytes\n", it_op.io_buf_size);
-        printf("number of groups in the file         = %llu\n", grp_info.nlinks);
-        printf("total number of 1D datasets          = %llu\n", it_op.num_1D_dset);
-        printf("total number of 2D datasets          = %llu\n", it_op.num_2D_dset);
-        printf("no. non-zero 1D datasets             = %llu\n", it_op.num_nonzero_1D);
-        printf("no. non-zero 2D datasets             = %llu\n", it_op.num_nonzero_2D);
-        printf("no. datasets chunking changed        = %llu\n", it_op.num_change_chunk);
-        printf("0th  dim  chunk size for 2D datasets = %llu\n", it_op.chunk_unit_2D);
-        printf("1st  dim  chunk size for 1D datasets = %llu\n", it_op.chunk_unit_1D);
-        printf("MiB-based chunk size for 1D datasets = %llu MiB\n", it_op.chunk_unit_MB);
+        printf("number of groups in the file         = %lu\n", grp_info.nlinks);
+        printf("total number of 1D datasets          = %lu\n", it_op.num_1D_dset);
+        printf("total number of 2D datasets          = %lu\n", it_op.num_2D_dset);
+        printf("no. non-zero 1D datasets             = %lu\n", it_op.num_nonzero_1D);
+        printf("no. non-zero 2D datasets             = %lu\n", it_op.num_nonzero_2D);
+        printf("no. datasets chunking changed        = %lu\n", it_op.num_change_chunk);
+        printf("0th  dim  chunk size for 2D datasets = %lu\n", it_op.chunk_unit_2D);
+        printf("1st  dim  chunk size for 1D datasets = %lu\n", it_op.chunk_unit_1D);
+        printf("MiB-based chunk size for 1D datasets = %lu MiB\n", it_op.chunk_unit_MB);
         printf("-------------------------------------------------------\n");
         printf("Input  file open   time              = %7.2f sec\n", timing[0]);
         printf("Output file create time              = %7.2f sec\n", timing[1]);

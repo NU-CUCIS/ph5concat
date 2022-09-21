@@ -220,7 +220,7 @@ int main(int argc, char **argv)
 
     if (dset_dims[1] > 1) {
         printf("Error at line %d: H5Fopen %s\n",__LINE__,infile);
-        printf("\tkey dataset %s 2nd dimension is expected of size 1 but got %llu\n",
+        printf("\tkey dataset %s 2nd dimension is expected of size 1 but got %lu\n",
                dname, dset_dims[1]);
         err_exit = -1;
         goto fn_exit;
@@ -246,7 +246,7 @@ int main(int argc, char **argv)
     /* check if increments by 1 */
     for (i=1; i<dset_dims[0]; i++) {
         if (buf[i] != i) {
-            printf("Error: %s[%lld] expects %lld but got %u\n",
+            printf("Error: %s[%ld] expects %ld but got %u\n",
                    dname,i,i,buf[i]);
             err_exit = -1;
             goto fn_exit;

@@ -409,7 +409,7 @@ seq_create:
 
         if (verbose) {
             printf("Read index dataset /%s/%s\n",grp_name,dset_name);
-            printf("     index dataset of shape %llu x %llu\n",dset_dims[0], dset_dims[1]);
+            printf("     index dataset of shape %lu x %lu\n",dset_dims[0], dset_dims[1]);
         }
 
         /* loop over the index dataset until all data has been read */
@@ -880,7 +880,7 @@ int main(int argc, char **argv)
         tmp = (long long*) malloc(dset_dims[0] * dset_dims[1] * sizeof(long long));
 
         /* read the entire index dataset */
-        if (verbose) printf("Read index dataset [%llu][%llu] %s\n", dset_dims[0], dset_dims[1], dset_name);
+        if (verbose) printf("Read index dataset [%lu][%lu] %s\n", dset_dims[0], dset_dims[1], dset_name);
         err = H5Dread(dset, H5T_NATIVE_LLONG, H5S_ALL, H5S_ALL, H5P_DEFAULT, tmp);
         if (err < 0) RETURN_ERROR("H5Dread", dset_name)
         if ((err = H5Dclose(dset)) < 0) RETURN_ERROR("H5Dclose", dset_name)

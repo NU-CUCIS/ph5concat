@@ -5,7 +5,7 @@
 /*
  * Note this program fails to work if using HDF5 1.12.1.
  * It appears to me HDF5 1.12.1 needs H5Dwrite_chunk() to be called in
- * collective more in order to work correctly. There are two issues:
+ * collective mode in order to work correctly. There are two issues:
  * 1. Hangs at H5Fclose() - MPI_File_set_size() is called inside of H5Fclose()
  *    but the implementation of subroutine H5FD__mpio_truncate() in file
  *    hdf5/src/H5FDmpio.c first broadcasts root's file size and then if it
@@ -259,12 +259,12 @@ herr_t copy_data(hid_t             loc_id,        /* object ID */
 
 #ifdef DEBUG
 if (!strcmp(name, "r4955_sr19_evt977/edge_index_3d_y")){
-printf("Dataset %s = in_chunk_dims=%llu %lld\n",name,in_chunk_dims[0],in_chunk_dims[1]);
+printf("Dataset %s = in_chunk_dims=%lu %ld\n",name,in_chunk_dims[0],in_chunk_dims[1]);
 haddr_t addr;
 hsize_t csize;
 err = H5Dget_chunk_info_by_coord(dset, chunk_off, NULL, &addr, &csize);
 if (err < 0) HANDLE_ERROR("H5Dget_chunk_info_by_coord ", "r4955_sr19_evt977/edge_index_3d_y")
-printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%llu\n",addr,csize);
+printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%lu\n",addr,csize);
 }
 #endif
                 /* move on to next chunk */
@@ -586,7 +586,7 @@ haddr_t addr;
 hsize_t csize;
 err = H5Dget_chunk_info_by_coord(dset, chunk_off, NULL, &addr, &csize);
 if (err < 0) HANDLE_ERROR("H5Dget_chunk_info_by_coord ", "r4955_sr19_evt977/edge_index_3d_y")
-printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%llu\n",addr,csize);
+printf("r4955_sr19_evt977/edge_index_3d_y chunk addr=%lu size=%lu\n",addr,csize);
 
 char *buf=(char*)malloc(2*229*sizeof(long long));
 if (rank == 0) {

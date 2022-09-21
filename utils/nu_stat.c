@@ -180,29 +180,29 @@ herr_t dataset_metadata(hid_t       loc_id,
         printf("\tDATASET \"%s\"\n",dataset_name);
         printf("\t\tDATATYPE %s\n",type_name);
         if (ndims == 1) {
-            printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
-            printf("\t\tDATASPACE ( %lld ) / ", dims[0]);
+            printf("\t\tDATASPACE ( %ld ) / ", dims[0]);
+            printf("\t\tDATASPACE ( %ld ) / ", dims[0]);
             if (maxdims[0] == H5S_UNLIMITED)
                 printf("( H5S_UNLIMITED )\n");
             else
-                printf("( %lld )\n", dims[0]);
+                printf("( %ld )\n", dims[0]);
             if (layout == H5D_CHUNKED)
-                printf("\t\tSTORAGE_LAYOUT ( %lld )\n", chunk_dims[0]);
+                printf("\t\tSTORAGE_LAYOUT ( %ld )\n", chunk_dims[0]);
             else
                 printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
         }
         else if (ndims == 2) {
-            printf("\t\tDATASPACE ( %lld, %lld ) / ", dims[0], dims[1]);
+            printf("\t\tDATASPACE ( %ld, %ld ) / ", dims[0], dims[1]);
             if (maxdims[0] == H5S_UNLIMITED)
                 printf("( H5S_UNLIMITED,");
             else
-                printf("( %lld", dims[0]);
+                printf("( %ld", dims[0]);
             if (maxdims[1] == H5S_UNLIMITED)
                 printf(" H5S_UNLIMITED)\n");
             else
-                printf(" %lld)\n", dims[1]);
+                printf(" %ld)\n", dims[1]);
             if (layout == H5D_CHUNKED)
-                printf("\t\tSTORAGE_LAYOUT ( %lld, %lld)\n", chunk_dims[0],
+                printf("\t\tSTORAGE_LAYOUT ( %ld, %ld)\n", chunk_dims[0],
                        chunk_dims[1]);
             else
                 printf("\t\tSTORAGE_LAYOUT %s\n",layout_name);
@@ -314,7 +314,7 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
         if (err < 0) HANDLE_ERROR("H5Gget_info", name);
 
         if (verbose)
-            printf("H5L_TYPE_EXTERNAL %s has %lld datasets\n",name,
+            printf("H5L_TYPE_EXTERNAL %s has %ld datasets\n",name,
                    grp_info.nlinks);
 
         it_op->gid++;
@@ -343,7 +343,7 @@ herr_t link_metadata(hid_t             loc_id,        /* object ID */
             if (err < 0) HANDLE_ERROR("H5Gget_info", name);
 
             if (verbose)
-                printf("GROUP %s (contains %llu datasets)\n",
+                printf("GROUP %s (contains %lu datasets)\n",
                        name, grp_info.nlinks);
 
             it_op->gid++;
@@ -443,7 +443,7 @@ void histogram(hsize_t  num,       /* number of elements in array values */
     /* Write histogram array to CSV file */
     fp = fopen(out_fname, "w");
     for (i = 0; i < num_bins; i++)
-        fprintf(fp, "%llu, %llu\n", i, frequency[i]);
+        fprintf(fp, "%lu, %lu\n", i, frequency[i]);
 
     fclose(fp);
 
@@ -521,7 +521,7 @@ int main(int argc, char **argv)
 
     it_op.num_events = 0;
     it_op.num_groups = grp_info.nlinks;
-    if (verbose) printf("Number of groups = %llu\n", it_op.num_groups);
+    if (verbose) printf("Number of groups = %lu\n", it_op.num_groups);
 
     it_op.num_links = 0;
     it_op.ext_links = (char**) calloc(it_op.num_groups, sizeof(char*));
@@ -582,7 +582,7 @@ int main(int argc, char **argv)
         /* number of event IDs is the size of dimension 0 */
         it_op.num_events = dims[0];
         if (verbose)
-            printf("Number of partitioning keys = %llu\n", it_op.num_events);
+            printf("Number of partitioning keys = %lu\n", it_op.num_events);
 
         err = H5Sclose(space_id);
         if (err < 0) HANDLE_ERROR("H5Sclose",evt_dset)
@@ -759,8 +759,8 @@ fn_exit:
                fsize, (float)fsize/1048576.0, (float)fsize/1073741824.0);
         printf("total dataset size                = %12.f B = %8.1f MiB = %5.1f GiB\n",
                total_dset_size, total_dset_size/1048576.0, total_dset_size/1073741824.0);
-        printf("number of groups in the file      = %12llu\n", it_op.num_groups);
-        printf("total number of datasets          = %12llu\n", total_num_dsets);
+        printf("number of groups in the file      = %12lu\n", it_op.num_groups);
+        printf("total number of datasets          = %12lu\n", total_num_dsets);
         printf("MAXIMUM single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
                max_grp_size, max_grp_size/1048576.0, max_grp_size/1073741824.0);
         printf("MINIMUM single group data size    = %12.f B = %8.1f MiB = %5.1f GiB\n",
@@ -770,47 +770,47 @@ fn_exit:
         if (it_op.hasEdges) {
             hsize_t num_bins;
             char *name = "edge_count_hist.csv";
-            printf("MAXIMUM edge count in a graph     = %12llu\n", max_edge_count);
-            printf("MINIMUM edge count in a graph     = %12llu\n", min_edge_count);
-            printf("MEDIAN  edge count in a graph     = %12llu\n", median_edge_count);
+            printf("MAXIMUM edge count in a graph     = %12lu\n", max_edge_count);
+            printf("MINIMUM edge count in a graph     = %12lu\n", min_edge_count);
+            printf("MEDIAN  edge count in a graph     = %12lu\n", median_edge_count);
             histogram(it_op.num_groups, edge_counts, edge_bin_width, name);
             num_bins = edge_counts[it_op.num_groups-1] / edge_bin_width;
             if (edge_counts[it_op.num_groups-1] % edge_bin_width) num_bins++;
             printf("Edge count histogram file         = %s\n", name);
             printf("    histogram bin width           = %12d\n", edge_bin_width);
-            printf("    number of histogram bins      = %12llu\n", num_bins);
+            printf("    number of histogram bins      = %12lu\n", num_bins);
         }
         if (it_op.hasHits) {
             hsize_t num_bins;
             char *name = "hit_count_hist.csv";
-            printf("MAXIMUM hit  count in a graph     = %12llu\n", max_hit_count);
-            printf("MINIMUM hit  count in a graph     = %12llu\n", min_hit_count);
-            printf("MEDIAN  hit  count in a graph     = %12llu\n", median_hit_count);
+            printf("MAXIMUM hit  count in a graph     = %12lu\n", max_hit_count);
+            printf("MINIMUM hit  count in a graph     = %12lu\n", min_hit_count);
+            printf("MEDIAN  hit  count in a graph     = %12lu\n", median_hit_count);
             histogram(it_op.num_groups, hit_counts, hit_bin_width, name);
             num_bins = hit_counts[it_op.num_groups-1] / hit_bin_width;
             if (hit_counts[it_op.num_groups-1] % hit_bin_width) num_bins++;
             printf("Hit count histogram file          = %s\n", name);
             printf("    histogram bin width           = %12d\n", hit_bin_width);
-            printf("    number of histogram bins      = %12llu\n", num_bins);
+            printf("    number of histogram bins      = %12lu\n", num_bins);
         }
         if (evt_dset != NULL) {
             hsize_t num_bins;
             char *name = "event_size_hist.csv";
             printf("event ID dataset                  = %s\n", evt_dset);
-            printf("Total number of event IDs         = %12llu\n", it_op.num_events);
-            printf("Total number of non-empty events  = %12llu\n", non_empty_evts);
-            printf("MAXIMUM single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
+            printf("Total number of event IDs         = %12lu\n", it_op.num_events);
+            printf("Total number of non-empty events  = %12lu\n", non_empty_evts);
+            printf("MAXIMUM single event data size    = %12lu B = %8.1f KiB = %5.1f MiB\n",
                    max_evt_size, max_evt_size/1024.0, max_evt_size/1048576.0);
-            printf("MINIMUM single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
+            printf("MINIMUM single event data size    = %12lu B = %8.1f KiB = %5.1f MiB\n",
                    min_evt_size, min_evt_size/1024.0, min_evt_size/1048576.0);
-            printf("MEDIAN  single event data size    = %12llu B = %8.1f KiB = %5.1f MiB\n",
+            printf("MEDIAN  single event data size    = %12lu B = %8.1f KiB = %5.1f MiB\n",
                    median_evt_size, median_evt_size/1024.0, median_evt_size/1048576.0);
             histogram(non_empty_evts, it_op.evt_size, event_bin_width, name);
             num_bins = it_op.evt_size[non_empty_evts-1] / event_bin_width;
             if (it_op.evt_size[non_empty_evts-1] % event_bin_width) num_bins++;
             printf("Event size histogram file         = %s\n", name);
             printf("    histogram bin width           = %12d\n", event_bin_width);
-            printf("    number of histogram bins      = %12llu\n", num_bins);
+            printf("    number of histogram bins      = %12lu\n", num_bins);
         }
     }
 

@@ -16,7 +16,7 @@ if PH5CONCAT_PROFILING
    AM_CPPFLAGS += -DPROFILE=1
 endif
 
-noinst_PROGRAMS = ph5_concat
+bin_PROGRAMS = ph5_concat
 
 ph5_concat_SOURCES = ph5_concat.cpp \
                      file_partition.cpp \

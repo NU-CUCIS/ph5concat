@@ -14,7 +14,7 @@ if PH5CONCAT_PROFILING
    AM_CPPFLAGS += -DPROFILE=1
 endif
 
-noinst_PROGRAMS = rechunk \
+bin_PROGRAMS = rechunk \
                   add_key \
                   sort_file_list \
                   check_seq_incr \

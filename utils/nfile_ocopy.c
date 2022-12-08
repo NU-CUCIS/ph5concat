@@ -4,9 +4,9 @@
  */
 
 /* This program is to be run in sequential.
- * It merges multiple HDF5 files into one, by calling H5Ocopy() for each group.
+ * It merges multiple HDF5 files into one, by calling H5Ocopy().
  * Because HDF5 1.12.x requires H5Ocopy() to be called collectively, this
- * program can only be run on one process. Note the group names must be unique
+ * program can only be run on one process. Note the object names must be unique
  * among all the input files.
  */
 
@@ -38,13 +38,12 @@ typedef struct {
     herr_t     err;
 } op_data;
 
-/*----< copy_groups() >------------------------------------------------------*/
-/* call back function used in H5Ovisit() */
+/*----< copy_obj() >---------------------------------------------------------*/
+/* call back function used in H5Giterate() */
 static
-herr_t copy_groups(hid_t             loc_id,        /* object ID */
-                   const char       *name,          /* object name */
-                   const H5O_info_t *info,          /* object metadata */
-                   void             *operator_data) /* data passed from caller */
+herr_t copy_obj(hid_t       group,         /* group ID */
+                const char *name,          /* object name */
+                void       *operator_data) /* data passed from caller */
 {
     int err_exit=0;
     herr_t err=0;
@@ -52,15 +51,10 @@ herr_t copy_groups(hid_t             loc_id,        /* object ID */
 
     it_op->err = 0;
 
-    if (info->type == H5O_TYPE_GROUP) {
-        /* Skip root group */
-        if (!strcmp(name, ".")) return 0;
+    if (verbose) printf("Copying %s\n",name);
 
-        if (verbose) printf("Copying GROUP %s\n",name);
-
-        err = H5Ocopy(loc_id, name, it_op->out_fd, name, H5P_DEFAULT, H5P_DEFAULT);
-        if (err < 0) HANDLE_ERROR("H5Ocopy", name)
-    }
+    err = H5Ocopy(group, name, it_op->out_fd, name, H5P_DEFAULT, H5P_DEFAULT);
+    if (err < 0) HANDLE_ERROR("H5Ocopy", name)
 
 fn_exit:
     it_op->err = err_exit;
@@ -69,42 +63,6 @@ fn_exit:
      * immediately return that positive value, indicating
      * short-circuit success.
      */
-}
-
-/*----< check_h5_objects() >-------------------------------------------------*/
-static
-int check_h5_objects(const char *filename, hid_t fid)
-{
-    ssize_t num_objs;
-    size_t ii, howmany;
-    H5I_type_t ot;
-    hid_t *objs;
-    char obj_name[1024];
-
-    num_objs = H5Fget_obj_count(fid, H5F_OBJ_ALL);
-    if (num_objs <= 0) return num_objs;
-    /* ignore FILE object */
-    if (num_objs > 1) printf("%zd object(s) open\n", num_objs);
-
-    objs = (hid_t*) malloc(num_objs * sizeof(hid_t));
-    howmany = H5Fget_obj_ids(fid, H5F_OBJ_ALL, num_objs, objs);
-    if (howmany > 1) printf("open objects: %zd\n", howmany);
-
-    for (ii=0; ii<howmany; ii++) {
-         char *type_name="";
-         ot = H5Iget_type(objs[ii]);
-              if (ot == H5I_FILE)      continue; /* type_name = "H5I_FILE"; */
-         else if (ot == H5I_GROUP)     type_name = "H5I_GROUP";
-         else if (ot == H5I_DATATYPE)  type_name = "H5I_DATATYPE";
-         else if (ot == H5I_DATASPACE) type_name = "H5I_DATASPACE";
-         else if (ot == H5I_DATASET)   type_name = "H5I_DATASET";
-         else if (ot == H5I_ATTR)      type_name = "H5I_ATTR";
-         H5Iget_name(objs[ii], obj_name, 1024);
-         printf("%s %4zd: type %s, name %s\n",
-                filename, ii, type_name, obj_name);
-    }
-    free(objs);
-    return howmany;
 }
 
 /*----< usage() >------------------------------------------------------------*/
@@ -218,30 +176,22 @@ int main(int argc, char **argv)
         HANDLE_ERROR("H5Fcreate in exclusive mode ", outfname)
 
     for (i=0; i<num_files; i++) {
-        printf("copying file %s\n",infile_names[i]);
+        if (verbose) printf("copying file %s\n",infile_names[i]);
 
         /* open input file in read-only mode */
         hid_t in_fd = H5Fopen(infile_names[i], H5F_ACC_RDONLY, H5P_DEFAULT);
         if (in_fd < 0) HANDLE_ERROR("Can't open input file", infile_names[i])
 
-        /* Iterate all objects in the input file i */
-#if defined HAS_H5OVISIT3 && HAS_H5OVISIT3
-        err = H5Ovisit3(in_fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, copy_groups,
-                        &it_op, H5O_INFO_ALL);
-        if (err < 0) HANDLE_ERROR("H5Ovisit3", infile_names[i])
-#else
-        err = H5Ovisit(in_fd, H5_INDEX_CRT_ORDER, H5_ITER_NATIVE, copy_groups,
-                       &it_op);
-        if (err < 0) HANDLE_ERROR("H5Ovisit", infile_names[i])
-#endif
+        /* Iterate all objects in root group of input file i */
+        err = H5Giterate(in_fd, ".", NULL, copy_obj, &it_op);
+        if (err < 0) HANDLE_ERROR("H5Giterate", infile_names[i])
+
         if (it_op.err < 0) HANDLE_ERROR("H5Ovisit", infile_names[i])
 
-        check_h5_objects(infile_names[i], in_fd);
         err = H5Fclose(in_fd);
         if (err < 0) HANDLE_ERROR("H5Fclose ", infile_names[i])
     }
 
-    check_h5_objects(outfname, it_op.out_fd);
     err = H5Fclose(it_op.out_fd);
     if (err < 0) HANDLE_ERROR("H5Fclose ",outfname)
 

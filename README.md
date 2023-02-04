@@ -3,35 +3,31 @@
 This software package contains C++ programs for concatenating HDF5 datasets
 across multiple files into a single file by appending individual datasets one
 after another. In a typical neutrino particle collision experiment, the
-detector collects data into files over a period of time. Each file is labeled
-by IDs of 'run' and 'subrun'. Runs are divided into Subruns. A run can be, for
-example, one day of data taking and a subrun can be about an hour of data
-taking. Each file contains thousands of two-dimensional datasets, organized
-into hundreds of group, containing data describing the properties of a given
-particle type. To analyze the data, individual datasets are required to be
-concatenated one after another across all files, preferably in an increasing
-order of their run and subrun IDs. As the data amount and number of files from
-a given experiment can become very large, the performance scalability of such
-parallel data concatenation is important.
+detector collects data into files over a period of time. It is a common
+practice to see each file is labeled in its file name by IDs of 'run' and
+'subrun'. Runs are divided into subruns. A run can be, for example, one day of
+data taking and a subrun can be about an hour of data taking. Each file may
+contains thousands of two-dimensional HDF5 datasets, organized into hundreds of
+HDF5 group, containing data describing the properties of a given particle type.
+To analyze the data, individual datasets are required to be concatenated one
+after another across all files, preferably in an increasing order of their run
+and subrun IDs. As the data amount and number of files from a given experiment
+can become very large, the performance scalability of such parallel data
+concatenation is important.
 
-## Input HDF5 Files
-* Each file contains data from a single subrun only. All groups must contain
-  datasets 'run', 'subrun', and 'evt'. Values in dataset 'run' in all groups in
-  an input file must be the same, representing the ID of a run. Similarly, all
-  'subrun' datasets must be single-valued, represents the ID of a subrun. The
-  run IDs among all input files must be the same. The subrun IDs can be
-  different among input files.
-* Each file contains multiple groups. The number of groups and group names must
-  be the same among all input files.
-* Each group contains multiple datasets. The number of datasets in a group can
-  be different from another group. For a given group, the number of datasets
-  and their names must be the same among the same groups in all input files.
-* All datasets are 2D arrays.
+## Requirements for Input HDF5 Files
+* Each input file may contain multiple HDF5 group objects, but the number of
+  groups and group names must be the same among all input files.
+* Each group may contain multiple HDF5 dataset objects. The number of datasets
+  in a group can be different from another group. For a given group, the number
+  of datasets and their names must be the same among the same groups across all
+  input files.
+* All datasets must be defined as 2D arrays. When the 2nd dimension size of a
+  dataset is 1, they are referred to as 1D dataset in this README file.
 * All datasets in the same group of the same input file must share the size of
   their 1st (most significant) dimension. Their 2nd dimension sizes may be
   different.
-* Datasets in different groups may be of different 1st dimension sizes.
-* Some datasets are actually 1D arrays whose 2nd dimension is of size 1.
+* The 1st dimension size of datasets in different groups may be different.
 * Datasets can be of size zero where their 1st dimension is of size 0.
 * All the files have the same "schema", i.e. same structures of groups and
   datasets in groups, e.g. numbers of groups, and number of datasets in each
@@ -104,39 +100,40 @@ parallel data concatenation is important.
   ```
   + `<np>`: Number of MPI processes.
   + `partitioning keys`: when command-line option '-k' is used, a new dataset
-    will be created in each group in the output file, which can be used for
-    data partitioning in parallel read operations. The new dataset, referred
-    as the partition key dataset, is named 'base_name.seq' where 'base_name'
-    is the dataset name provided in the command-line option '-k'. Contents of
-    the partition key dataset are generated based on the dataset 'base_name'
-    in group '/spill'. This base dataset must contain a list of unique integer
-    values, stored in an increasing order, not necessarily incremented by one.
-    The value range of base dataset, i.e. the minimum and maximum values, in
-    one input file should not overlap with the ranges of any other files.
-    An example is the dataset '/spill/evt'. A common practiice of parallel
-    reads of the concatenated file is to use the data partitioning strategy
-    that assigns dataset elements with the same values of 'run', 'subrun', and
-    the base dataset to the same MPI process. These 3 datasets are referred to
-    as 3-tuple index datasets. If this is the case, then users are recommended
-    to first use utility program [utils/sort_file_list](utils#sort_file_list)
-    to sort the input file names based on the values of run, subrun, and any
-    additional datasets into an increasing order, and use them to run this
-    concatenation program. This way, the partition key datasets created in the
-    output file store a list of unique IDs corresponding to the unique values
-    of 3-tuples, or N-tuple if the input files are sorted based on N index
-    datasets. The unique ID values in the key datasets are consistent across
-    all groups in the output file. When option '-k' is not used, the partition
-    key dataset will not be created.
+    will be created in each group in the output file, which can be used by
+    applications to partition datasets among processes when performing parallel
+    read operations. The new dataset, referred as the 'partition key dataset',
+    is named '`base_name`.seq' where `base_name` is the dataset name specified
+    in the command-line option '-k'. Contents of the partition key dataset are
+    generated based on the dataset `base_name` in group '/spill'. Thus all
+    input files **must** contain group '/spill', if option '-k' is used. This
+    base dataset contains integral values, sorted in a non-decreasing order,
+    i.e. a latter is either equal or bigger than the former and are not
+    necessarily incremented by one. Because the concatenation implemented in
+    `ph5_concat` is based on the order of given input file names, the values of
+    `base_name` dataset in one file are always treated as larger values than
+    the files concatenated before it. An example of option '-k' is '-k evt',
+    which is the event ID. A common practice of data partitioning strategy used
+    in parallel reads is to assign dataset elements with the same values of
+    'run', 'subrun', and 'evt' to the same MPI process. These 3 datasets are
+    referred to as 3-tuple index datasets. If the order of data is important,
+    then users are recommended to first run utility program
+    [utils/sort_file_list](utils#sort_file_list) to sort the input file names,
+    and then use the sorted file name list to run `ph5_concat`. Note the unique
+    ID values in the key datasets are consistent across all groups in the
+    output file. When option '-k' is not used, the partition key dataset will
+    not be created. In this case, users can later run utility program
+    [add_key](utils/README.md#add_key) to add partitioning key datasets.
   + I/O buffer size: when command-line option '-b' is used with value 0, this
-    is equivalent to set the size to unlimited, i.e. the concatenator will
-    allocate a buffer large enough to write each dataset in a single call to
-    H5Dwrite. In this case, users may encounter out-of-memory errors.
+    is equivalent to set the size to unlimited, i.e. `ph5_concat` will allocate
+    a buffer large enough to write each dataset in a single call to H5Dwrite.
+    In this case, users may encounter out-of-memory errors.
   + I/O strategies: two I/O strategies (1 and 2) are currently supported. Both
     strategies share the same method for reading and writing the 1D datasets.
     For 1D datasets, input files are first assigned disjointly and evenly
     among all processes. Each process reads each 1D dataset entirely from the
     assigned files and writes it to the output files using collective I/O. The
-    difference between staretgies 1 and 2 are for the 2D datasets. In strategy
+    difference between strategies 1 and 2 are for the 2D datasets. In strategy
     1, all processes open all input files collectively using MPI-IO and read
     all individual 2D datasets collectively (i.e. shared-file reads), followed
     by all processes collectively writing individual datasets to the output

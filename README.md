@@ -19,7 +19,7 @@ concatenation is important.
 * Each input file may contain multiple HDF5 group objects, but the number of
   groups and group names must be the same among all input files.
 * Each group may contain multiple HDF5 dataset objects. The number of datasets
-  in a group can be different from another group. For a given group, the number
+  in a group can be different from other groups. For a given group, the number
   of datasets and their names must be the same among the same groups across all
   input files.
 * All datasets must be defined as 2D arrays. When the 2nd dimension size of a
@@ -56,8 +56,8 @@ concatenation is important.
   enabled
 
 ## Instructions to Build
-0. If building from a git clone of this repository, then the below command
-   must run first. Otherwise, if building from an official release, this step
+0. If building from a git clone of this repository, then please run commands
+   below first. Otherwise, if building from an official release, this step
    can be skipped.
    ```
    git clone https://github.com/NU-CUCIS/ph5concat.git
@@ -74,8 +74,8 @@ concatenation is important.
                --enable-profiling
    ```
    * Option '--enable-profiling' enables timing measurement for internal
-     functions and to report timing breakdowns on standard output.
-2. Run command "make" to create the executable file named "ph5_concat"
+     functions and to report timing breakdowns to the standard output.
+2. Run command 'make' to create the executable file named "ph5_concat"
 
 ## Command to Run
 * Command-line options are:
@@ -99,29 +99,32 @@ concatenation is important.
   [-i infile]    input file containing HEP data files (default: list.txt)
   ```
   + `<np>`: Number of MPI processes.
-  + `partitioning keys`: when command-line option '-k' is used, a new dataset
-    will be created in each group in the output file, which can be used by
-    applications to partition datasets among processes when performing parallel
-    read operations. The new dataset, referred as the 'partition key dataset',
-    is named '`base_name`.seq' where `base_name` is the dataset name specified
-    in the command-line option '-k'. Contents of the partition key dataset are
-    generated based on the dataset `base_name` in group '/spill'. Thus all
-    input files **must** contain group '/spill', if option '-k' is used. This
-    base dataset contains integral values, sorted in a non-decreasing order,
-    i.e. a latter is either equal or bigger than the former and are not
-    necessarily incremented by one. Because the concatenation implemented in
-    `ph5_concat` is based on the order of given input file names, the values of
-    `base_name` dataset in one file are always treated as larger values than
-    the files concatenated before it. An example of option '-k' is '-k evt',
-    which is the event ID. A common practice of data partitioning strategy used
-    in parallel reads is to assign dataset elements with the same values of
-    'run', 'subrun', and 'evt' to the same MPI process. These 3 datasets are
-    referred to as 3-tuple index datasets. If the order of data is important,
-    then users are recommended to first run utility program
+  + `partitioning keys`: when command-line option '-k' is used, a new dataset,
+    referred as the 'partition key dataset', will be created in each group in
+    the output file, which can be used by applications to partition datasets
+    among processes when performing parallel read operations. The name of
+    this new dataset is '`base_name`.seq' where `base_name` is the dataset
+    name specified in the command-line option '-k'. Contents of the partition
+    key dataset will be generated based on the dataset `base_name` in group
+    '/spill'. Thus all input files **must** contain group '/spill', if option
+    '-k' is used. This `base_name` dataset should contain integral values
+    sorted in a non-decreasing order, i.e. a latter element is either equal
+    or bigger than the former and are not necessarily incremented by one.
+    Because the concatenation implemented in `ph5_concat` is based on the
+    order of given input file names, the values of `base_name` dataset in one
+    file are always treated as larger values than the files concatenated
+    before it.
+  + An example use of option '-k' is '-k evt', which is the event ID. A common
+    practice of data partitioning strategy used in parallel reads is to assign
+    dataset elements associated with the same values of 'run', 'subrun', and
+    'evt' to the same MPI process. These 3 datasets are referred to as 3-tuple
+    index datasets. If the order of data is important, then users are
+    recommended to first run utility program
     [utils/sort_file_list](utils#sort_file_list) to sort the input file names,
-    and then use the sorted file name list to run `ph5_concat`. Note the unique
-    ID values in the key datasets are consistent across all groups in the
-    output file. When option '-k' is not used, the partition key dataset will
+    and then use the sorted file name list to run `ph5_concat`.
+  + Note the unique ID values in the key datasets generated in the output file
+    are consistent across all the groups.
+  + When option '-k' is not used, the partition key dataset will
     not be created. In this case, users can later run utility program
     [add_key](utils/README.md#add_key) to add partitioning key datasets.
   + I/O buffer size: when command-line option '-b' is used with value 0, this

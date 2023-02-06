@@ -163,22 +163,23 @@ herr_t gather_grp_names(hid_t             loc_id,/* object ID */
 
 /*----< add_seq() >---------------------------------------------------------*/
 static
-herr_t add_seq(hid_t       fid,
-               vector<string> index_levels,
-               const char *grp_name,
-               const char *part_key_base,
-               table       lookup_table,
-               int         create_seq,
-               int         create_seq_cnt,
-               size_t     *num_nonzero_groups,
-               size_t     *max_len,    /* max seq size */
-               size_t     *min_len,    /* min seq size */
-               size_t     *avg_len,    /* avg seq size */
-               double     *timing)
+herr_t add_seq(hid_t           fid,
+               int             overwrite,
+               vector<string>  index_levels,
+               const char     *grp_name,
+               const char     *part_key_base,
+               table           lookup_table,
+               int             create_seq,
+               int             create_seq_cnt,
+               size_t         *num_nonzero_groups,
+               size_t         *max_len,    /* max seq size */
+               size_t         *min_len,    /* min seq size */
+               size_t         *avg_len,    /* avg seq size */
+               double         *timing)
 {
     const char *dset_name;
     char seq_name[1024], seq_cnt_name[1024];
-    int ndims;
+    int ndims, isExist;
     size_t ii, jj, ndsets, chunk_size;
     int64_t *seq_buf;
     herr_t err;
@@ -282,8 +283,25 @@ seq_create:
         out_fspace = H5Screate_simple(ndims, seq_dims, maxdims);
         if (err < 0) CALLBACK_ERROR("H5Screate_simple", seq_name)
 
-        /* create the new partition key dataset */
+        /* name of the new partition key dataset */
         sprintf(seq_name, "%s.seq", part_key_base);
+
+        /* check if the dataset already exists */
+        isExist = H5Lexists(grp_id, seq_name, H5P_DEFAULT);
+        if (isExist >= 0) {
+            if (overwrite) {
+                if (verbose) printf("Delete dataset %s/%s\n",grp_name,seq_name);
+                err = H5Ldelete(grp_id, seq_name, H5P_DEFAULT);
+                if (err < 0) CALLBACK_ERROR("H5Ldelete", seq_name)
+            }
+            else {
+                cerr<<"Error: dataset " << grp_name << "/" << seq_name << " already exists"<<endl;
+                return -1;
+            }
+        }
+
+        /* create the new partition key dataset */
+        if (verbose) printf("Create dataset %s/%s\n",grp_name,seq_name);
         seq_id = H5Dcreate2(grp_id, seq_name, H5T_STD_I64LE, out_fspace,
                             H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
         if (seq_id < 0) CALLBACK_ERROR("H5Dcreate2", seq_name)
@@ -487,8 +505,22 @@ seq_cnt_create:
             seq_cnt[ii++] = x.second;
         }
 
-        /* create the new partition key dataset */
+        /* name of new partition key dataset */
         sprintf(seq_cnt_name, "%s.seq_cnt", part_key_base);
+
+        /* check if the dataset already exists */
+        isExist = H5Lexists(grp_id, seq_cnt_name, H5P_DEFAULT);
+        if (isExist >= 0) {
+            if (overwrite) {
+                if (verbose) printf("Delete dataset %s/%s\n",grp_name,seq_cnt_name);
+                err = H5Ldelete(grp_id, seq_cnt_name, H5P_DEFAULT);
+                if (err < 0) CALLBACK_ERROR("H5Ldelete", seq_cnt_name)
+            }
+            else {
+                cerr<<"Error: dataset " << grp_name << "/" << seq_cnt_name << " already exists"<<endl;
+                return -1;
+            }
+        }
 
         /* seq dataset will be of the same dimension lengths */
         hsize_t maxdims[2] = {H5S_UNLIMITED, 2};
@@ -496,6 +528,8 @@ seq_cnt_create:
         out_fspace = H5Screate_simple(2, seq_cnt_dims, maxdims);
         if (err < 0) CALLBACK_ERROR("H5Screate_simple", seq_cnt_name)
 
+        /* create the new partition key dataset */
+        if (verbose) printf("Create dataset %s/%s\n",grp_name,seq_cnt_name);
         seq_cnt_id = H5Dcreate2(grp_id, seq_cnt_name, H5T_STD_I64LE, out_fspace,
                                 H5P_DEFAULT, dcpl_id, H5P_DEFAULT);
         if (seq_cnt_id < 0) CALLBACK_ERROR("H5Dcreate2", seq_cnt_name)
@@ -615,6 +649,7 @@ usage(char *progname)
 #define USAGE   "\
   [-h]            print this command usage message\n\
   [-v]            verbose mode (default: off)\n\
+  [-f]            overwrite key datasets if already exist\n\
   [-r pattern]    groups matching pattern are not injected with key dataset\n\
   [-k indx_names] dataset names separated by comma, to be used to generate\n\
                   partition keys (default: /spill/run,/spill/subrun,/spill/evt)\n\
@@ -661,13 +696,13 @@ usage(char *progname)
        Users are warned for possible data type overflow, if there is any.\n\
   *ph5concat version _PH5CONCAT_VERSION_ of _PH5CONCAT_RELEASE_DATE_\n"
 
-    printf("Usage: %s [-h|-v|-r pattern] -k indx_names file_name\n%s\n", progname, USAGE);
+    printf("Usage: %s [-h|-v|-f|-r pattern] -k indx_names file_name\n%s\n", progname, USAGE);
 }
 
 /*----< main() >-------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-    int c, err_exit=0, ndims, create_seq=1, create_seq_cnt=0;
+    int c, err_exit=0, ndims, create_seq=1, create_seq_cnt=0, overwrite=0;
     char *infile=NULL, dset_name[1024], part_key_base[1024];
     char *token, *dset_list=NULL, *pattern=NULL, *grp_name=NULL, str_tmp[1024];
     size_t ii, jj, num_orig_groups=0, num_nonzero_groups=0, ndsets;
@@ -695,9 +730,11 @@ int main(int argc, char **argv)
     verbose = 0; /* default is quiet */
 
     /* command-line arguments */
-    while ((c = getopt(argc, argv, "hvacr:k:")) != -1)
+    while ((c = getopt(argc, argv, "hvfacr:k:")) != -1)
         switch(c) {
             case 'v': verbose = 1;
+                      break;
+            case 'f': overwrite = 1;
                       break;
             case 'k': dset_list = strdup(optarg);
                       break;
@@ -917,8 +954,8 @@ int main(int argc, char **argv)
 
     /* Iterate all groups and create a new key dataset in each group */
     for (ii=0; ii<it_op.num_groups; ii++) {
-        err = add_seq(fid, index_levels, it_op.grp_names[ii], part_key_base,
-                      lookup_table, create_seq, create_seq_cnt,
+        err = add_seq(fid, overwrite, index_levels, it_op.grp_names[ii],
+                      part_key_base, lookup_table, create_seq, create_seq_cnt,
                       &num_nonzero_groups, &max_seq, &min_seq, &avg_seq, stime);
         if (err < 0) RETURN_ERROR("add_seq", it_op.grp_names[ii])
     }

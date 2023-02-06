@@ -165,9 +165,10 @@ of 1, with no repeated value.
 Command usage:
   ```
   % ./add_key -h
-  Usage: ./add_key [-h|-v|-r pattern] -k indx_names file_name
+  Usage: ./add_key [-h|-v|-f|-r pattern] -k indx_names file_name
     [-h]            print this command usage message
     [-v]            verbose mode (default: off)
+    [-f]            overwrite key datasets if already exist
     [-r pattern]    groups matching pattern are not injected with key dataset
     [-k indx_names] dataset names separated by comma, to be used to generate
                     partition keys (default: /spill/run,/spill/subrun,/spill/evt)

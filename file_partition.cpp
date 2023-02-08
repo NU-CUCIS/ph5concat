@@ -347,16 +347,22 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
          * not supported parallel I/O for variable-length datasets. We read
          * the string datasets one file per process and then write the
          * concatenated datasets as fixed-length. The string contents are
-         * copied over to a fixed-length array.
+         * copied over to a fixed-length array. Note dset.type_id is the ouput
+         * dataset's type ID. We need to retrieve the input dataset's type ID.
          */
-        htri_t isVLEN = H5Tis_variable_str(dset.type_id);
+        hid_t in_dset_type_id = H5Dget_type(dset_id);
+        if (in_dset_type_id < 0) HANDLE_ERROR("H5Dget_type");
+
+        htri_t isVLEN = H5Tis_variable_str(in_dset_type_id);
+        if (isVLEN < 0) HANDLE_ERROR("H5Tis_variable_str")
+
         char **rdata = (char **) malloc (round_len * sizeof (char *));
         if (space_id == H5S_ALL) {
             space_id = H5Dget_space(dset_id);
             if (space_id < 0) HANDLE_ERROR("H5Dget_space")
         }
 
-        if (isVLEN) {
+        if (isVLEN > 0) {
             /* prepare reading the variable-length dataset */
             hid_t memtype = H5Tcopy(H5T_C_S1);
             if (memtype < 0) HANDLE_ERROR("H5Tcopy");
@@ -378,7 +384,7 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             /* Close and release resources internally allocated by HDF5 for
              * variable-length strings.
              */
-            err = H5Dvlen_reclaim (dset.type_id, space_id, H5P_DEFAULT, rdata);
+            err = H5Dvlen_reclaim(in_dset_type_id, space_id, H5P_DEFAULT, rdata);
             if (err < 0) HANDLE_ERROR("H5Dvlen_reclaim");
         }
         else {
@@ -386,6 +392,7 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
             assert(ndims == 2);
 
+            /* input dset.type_size must be <= MAX_STR_LEN (the output type size) */
             if (dset.type_size > MAX_STR_LEN) {
                 printf("Error at %s line %d: file %zdth dataset %s of H5T_STRING size(%zd) > MAX_STR_LEN(%d)\n",
                        __FILE__,__LINE__, file_no, dset.name.c_str(), dset.type_size, MAX_STR_LEN);
@@ -393,14 +400,14 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
                 goto fn_exit;
             }
 
-            rdata[0] = (char*) malloc(round_len * MAX_STR_LEN);
+            rdata[0] = (char*) calloc(round_len, dset.type_size);
             for (ii=1; ii<round_len; ii++)
-                rdata[ii] = rdata[ii-1] + MAX_STR_LEN;
+                rdata[ii] = rdata[ii-1] + dset.type_size;
 
             /* prepare reading the fixed-length dataset */
             hid_t memtype = H5Tcopy(H5T_C_S1);
             if (memtype < 0) HANDLE_ERROR("H5Tcopy");
-            err = H5Tset_size(memtype, MAX_STR_LEN);
+            err = H5Tset_size(memtype, dset.type_size);
             if (err < 0) HANDLE_ERROR("H5Tset_size");
             err = H5Dread(dset_id, memtype, memspace_id, space_id, H5P_DEFAULT,
                           rdata[0]);
@@ -411,7 +418,8 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             /* copy rdata[*] to buffer+mem_off */
             char *ptr = buffer+mem_off;
             for (ii=0; ii<round_len; ii++) {
-                strncpy(ptr, rdata[ii], MAX_STR_LEN);
+                memset(ptr, 0, MAX_STR_LEN);
+                strncpy(ptr, rdata[ii], dset.type_size);
                 ptr += MAX_STR_LEN;
             }
             free(rdata[0]);
@@ -468,14 +476,20 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
     if (err < 0) HANDLE_ERROR("H5Sselect_hyperslab")
 
     if (dset.type_class == H5T_STRING) {
-        /* fixed-length string dataset */
+        /* Write fixed-length string dataset, even if the input dataset is a VL
+         * string. HDF5 1.13.3: Parallel IO does not support writing VL or
+         * region reference datatypes yet
+         */
         hid_t memtype = H5Tcopy(H5T_C_S1);
         if (memtype < 0) HANDLE_ERROR("H5Tcopy");
         err = H5Tset_size(memtype, MAX_STR_LEN);
         if (err < 0) HANDLE_ERROR("H5Tset_size");
+
         /* Write the data. */
-        err = H5Dwrite(dset.out_dset_id, memtype, memspace_id, space_id,
+        err = H5Dwrite(dset.out_dset_id, memtype, H5S_ALL, H5S_ALL,
                        dxpl_id, wbuf);
+        if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
+
         err = H5Tclose(memtype);
         if (err < 0) HANDLE_ERROR("H5Tclose");
     }
@@ -483,8 +497,8 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
         /* Write the data. */
         err = H5Dwrite(dset.out_dset_id, dset.type_id, memspace_id, space_id,
                        dxpl_id, wbuf);
+        if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
     }
-    if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
 
 fn_exit:
     if (memspace_id >= 0)

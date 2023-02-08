@@ -382,10 +382,16 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             if (err < 0) HANDLE_ERROR("H5Dvlen_reclaim");
         }
         else {
-            hsize_t ii;
-            hsize_t dims[2];
+            hsize_t ii, dims[2];
             int ndims = H5Sget_simple_extent_dims(space_id, dims, NULL);
             assert(ndims == 2);
+
+            if (dset.type_size > MAX_STR_LEN) {
+                printf("Error at %s line %d: file %zdth dataset %s of H5T_STRING size(%zd) > MAX_STR_LEN(%d)\n",
+                       __FILE__,__LINE__, file_no, dset.name.c_str(), dset.type_size, MAX_STR_LEN);
+                err_exit = -1;
+                goto fn_exit;
+            }
 
             rdata[0] = (char*) malloc(round_len * MAX_STR_LEN);
             for (ii=1; ii<round_len; ii++)

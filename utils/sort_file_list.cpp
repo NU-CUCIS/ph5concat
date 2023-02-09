@@ -41,7 +41,7 @@ static int verbose, debug;
 }
 
 struct compv {
-    bool operator()(const vector<long long>& lhs, const vector<long long>& rhs)
+    bool operator()(const vector<long long>& lhs, const vector<long long>& rhs) const
     {
         assert(lhs.size() == rhs.size());
 

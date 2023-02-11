@@ -486,7 +486,7 @@ int Concatenator::write_dataset_2D(DSInfo_t &dset,
         if (err < 0) HANDLE_ERROR("H5Tset_size");
 
         /* Write the data. */
-        err = H5Dwrite(dset.out_dset_id, memtype, H5S_ALL, H5S_ALL,
+        err = H5Dwrite(dset.out_dset_id, memtype, memspace_id, space_id,
                        dxpl_id, wbuf);
         if (err < 0) HANDLE_DSET_ERROR("H5Dwrite", dset.name)
 

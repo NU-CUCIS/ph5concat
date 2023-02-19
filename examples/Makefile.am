@@ -22,6 +22,8 @@ BUILT_SOURCES = $(INPUT_FILES:.gz=.h5)
 .gz.h5:
 	gzip -dc $< > $@
 
+TESTS_ENVIRONMENT = export TESTMPIRUN="$(TESTMPIRUN)";
+
 CLEANFILES = core core.* out.h5
 
 DISTCLEANFILES = $(INPUT_FILES:.gz=.h5)

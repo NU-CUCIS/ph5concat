@@ -357,6 +357,17 @@ AC_CHECK_DECL(H5get_alloc_stats,
               [AC_DEFINE(HAS_H5GET_ALLOC_STATS, 1, [Define if API H5get_alloc_stats is defined])],
               [], [[#include <hdf5.h>]])
 
+AC_ARG_VAR(TESTMPIRUN, [MPI run command for "make check", @<:@default: mpiexec@:>@])
+if test "x${TESTMPIRUN}" = x ; then
+   dnl if TESTMPIRUN has been set by users (default is "mpiexec")
+   if test "x$MPI_INSTALL" != x ; then
+      AC_CHECK_PROGS(TESTMPIRUN, [mpiexec mpirun], [], [$MPI_INSTALL/bin])
+      TESTMPIRUN="$MPI_INSTALL/bin/$TESTMPIRUN"
+   else
+      AC_CHECK_PROGS(TESTMPIRUN, [mpiexec mpirun])
+   fi
+fi
+
 AC_CONFIG_FILES(Makefile utils/Makefile examples/Makefile case_study/Makefile)
 
 AC_OUTPUT

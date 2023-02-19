@@ -9,6 +9,9 @@ set -e
 
 # echo "srcdir=$srcdir"
 # echo "TESTMPIRUN=$TESTMPIRUN"
+# echo "HDF5_LIB_PATH=$HDF5_LIB_PATH"
+
+export LD_LIBRARY_PATH=${HDF5_LIB_PATH}:${LD_LIBRARY_PATH}
 
 rm -f ./out.h5
 CMD="${TESTMPIRUN} -n 2 ../ph5_concat -i ${srcdir}/sample_list.txt -o out.h5"

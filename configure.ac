@@ -269,6 +269,7 @@ AC_ARG_WITH([hdf5],
       fi
    fi
 ])
+AC_SUBST(HDF5_LIB_PATH, [$hdf5_lib])
 
 # Only HDF5 1.10.x supports compression
 AC_LANG_PUSH(C++)

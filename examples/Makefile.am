@@ -33,7 +33,7 @@ DISTCLEANFILES = $(INPUT_FILES:.gz=.h5)
 EXTRA_DIST = $(INPUT_FILES) \
              sample_list.txt \
              parallel_runs.sh \
-             sample_output.h5 \
+             sample_output.h5.gz \
              sample_output.metadata \
              sample_stdout.txt \
              vl_string.txt \

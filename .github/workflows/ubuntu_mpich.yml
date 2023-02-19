@@ -118,11 +118,11 @@ jobs:
         - name: Test distribution - make distcheck
           if: ${{ success() }}
           run: |
-            cd ${GITHUB_WORKSPACE}
+            cd ${GITHUB_WORKSPACE}/build
             make -j4 -s V=1 LIBTOOLFLAGS=--silent distcheck DISTCHECK_CONFIGURE_FLAGS="--silent --with-hdf5=${GITHUB_WORKSPACE}/HDF5 --with-mpi=${GITHUB_WORKSPACE}/MPICH LIBS=-lz"
         - name: make distclean
           if: ${{ always() }}
           run: |
-            cd ${GITHUB_WORKSPACE}
+            cd ${GITHUB_WORKSPACE}/build
             make -s distclean
 

@@ -1,0 +1,116 @@
+name: Stacking Log, Cache, Async VOLs
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
+      - '**/*.jpg'
+      - '**/*.png'
+      - 'docs/*'
+      - 'tests/*'
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
+      - '**/*.jpg'
+      - '**/*.png'
+      - 'docs/*'
+      - 'tests/*'
+
+env:
+   MPICH_VERSION: 4.1
+   HDF5_VERSION: 1.14.0
+
+jobs:
+    build:
+      runs-on: ubuntu-latest
+      timeout-minutes: 60
+      steps:
+        - uses: actions/checkout@v3
+        - name: Set up dependencies
+          run: |
+            sudo apt-get update
+            sudo apt-get -y install automake autoconf libtool libtool-bin m4 cmake
+            sudo apt-get -y install zlib1g-dev
+        - name: Build MPICH
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            rm -rf MPICH ; mkdir MPICH ; cd MPICH
+            wget -q https://www.mpich.org/static/downloads/${MPICH_VERSION}/mpich-${MPICH_VERSION}.tar.gz
+            gzip -dc mpich-${MPICH_VERSION}.tar.gz | tar -xf -
+            cd mpich-${MPICH_VERSION}
+            ./configure --prefix=${GITHUB_WORKSPACE}/MPICH \
+                        --silent \
+                        --enable-romio \
+                        --with-file-system=ufs \
+                        --with-device=ch3:sock \
+                        --disable-fortran \
+                        CC=gcc
+            make -s LIBTOOLFLAGS=--silent V=1 -j 4 install > qout 2>&1
+            make -s -j 4 distclean >> qout 2>&1
+        - name: Install HDF5
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            rm -rf HDF5 ; mkdir HDF5 ; cd HDF5
+            VER_MAJOR=${HDF5_VERSION%.*}
+            wget -cq https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-${VER_MAJOR}/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.gz
+            tar -zxf hdf5-${HDF5_VERSION}.tar.gz
+            cd hdf5-${HDF5_VERSION}
+            ./configure --prefix=${GITHUB_WORKSPACE}/HDF5 \
+                        --silent \
+                        --enable-parallel \
+                        --enable-build-mode=production \
+                        --enable-unsupported \
+                        --enable-threadsafe \
+                        --disable-doxygen-doc \
+                        --disable-doxygen-man \
+                        --disable-doxygen-html \
+                        --disable-tests \
+                        --disable-fortran \
+                        --disable-cxx \
+                        CC=${GITHUB_WORKSPACE}/MPICH/bin/mpicc
+            make -s LIBTOOLFLAGS=--silent V=1 -j 4 install > qout 2>&1
+            make -s -j 4 distclean >> qout 2>&1
+        - name: Dump config.log file if build HDF5 failed
+          if: ${{ failure() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            cat ${HDF5_ROOT}/hdf5-${HDF5_VERSION}/config.log
+        - name: Configure ph5concat
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            autoreconf -i
+            rm -rf ./build; mkdir build ; cd build
+            ../configure --with-hdf5=${GITHUB_WORKSPACE}/HDF5 \
+                         --with-mpi=${GITHUB_WORKSPACE}/MPICH \
+                         CFLAGS="$-O0 -g -Wall" \
+                         LIBS="-lz"
+        - name: Print config.log if error
+          if: ${{ failure() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}/build
+            cat config.log
+        - name: Build ph5concat
+          if: ${{ success() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}/build
+            make -j 8
+        - name: test - make check
+          if: ${{ success() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}/build
+            make check
+        - name: Test distribution - make distcheck
+          if: ${{ success() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            make -j4 -s V=1 LIBTOOLFLAGS=--silent distcheck DISTCHECK_CONFIGURE_FLAGS="--silent --with-hdf5=${GITHUB_WORKSPACE}/HDF5 --with-mpi=${GITHUB_WORKSPACE}/MPICH LIBS=-lz"
+        - name: make distclean
+          if: ${{ always() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}
+            make -s distclean
+

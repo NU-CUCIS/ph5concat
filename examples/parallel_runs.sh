@@ -33,3 +33,15 @@ echo "CMD=$CMD"
 $CMD
 echo "========================================================================"
 
+rm -f ./out.h5
+CMD="${TESTMPIRUN} -n 1 ../ph5_concat -i ${srcdir}/string.txt -o out.h5 -b 1"
+echo "CMD=$CMD"
+$CMD
+echo "========================================================================"
+
+rm -f ./out.h5
+CMD="${TESTMPIRUN} -n 1 ../ph5_concat -i ${srcdir}/strings.txt -o out.h5 -b 1"
+echo "CMD=$CMD"
+$CMD
+echo "========================================================================"
+

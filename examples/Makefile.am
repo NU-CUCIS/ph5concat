@@ -15,7 +15,8 @@ INPUT_FILES = sample_r11981_s06.gz \
               sample_r11981_s07.gz \
               sample_r11981_s08.gz \
               sample_r11981_s09.gz \
-              vl_string.gz
+              vl_string.gz \
+              string.gz
 
 BUILT_SOURCES = $(INPUT_FILES:.gz=.h5)
 
@@ -35,5 +36,7 @@ EXTRA_DIST = $(INPUT_FILES) \
              sample_output.h5 \
              sample_output.metadata \
              sample_stdout.txt \
-             vl_string.txt
+             vl_string.txt \
+             string.txt \
+             strings.txt
 

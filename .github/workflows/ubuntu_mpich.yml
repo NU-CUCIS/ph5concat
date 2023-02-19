@@ -86,9 +86,9 @@ jobs:
             rm -rf ./build; mkdir build ; cd build
             ../configure --with-hdf5=${GITHUB_WORKSPACE}/HDF5 \
                          --with-mpi=${GITHUB_WORKSPACE}/MPICH \
-                         CFLAGS="$-O0 -g -Wall" \
+                         CFLAGS="-O0 -g -Wall" \
                          LIBS="-lz"
-        - name: Print config.log if error
+        - name: Dump config.log if error
           if: ${{ failure() }}
           run: |
             cd ${GITHUB_WORKSPACE}/build
@@ -103,6 +103,18 @@ jobs:
           run: |
             cd ${GITHUB_WORKSPACE}/build
             make check
+        - name: Dump test log files
+          if: ${{ always() }}
+          run: |
+            cd ${GITHUB_WORKSPACE}/build
+            fname=`find utils examples -type f -name "*.log"`
+            for f in $fname ; do \
+               bname=`basename $f` ; \
+               if test "x$bname" != xconfig.log ; then \
+                  echo "-------- dump $f ----------------------------" ; \
+                  cat $f ; \
+               fi ; \
+            done
         - name: Test distribution - make distcheck
           if: ${{ success() }}
           run: |

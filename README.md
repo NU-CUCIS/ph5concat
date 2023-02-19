@@ -59,13 +59,13 @@ concatenation is important.
 0. If building from a git clone of this repository, then please run commands
    below first. Otherwise, if building from an official release, this step
    can be skipped.
-   ```
+   ```console
    git clone https://github.com/NU-CUCIS/ph5concat.git
    cd ph5concat
    autoreconf -i
    ```
 1. Run command 'configure'. An example is given below.
-   ```
+   ```console
    ./configure --with-mpi=$HOME/MPICH/3.3 \
                --with-hdf5=$HOME/HDF5/1.10.5 \
                CFLAGS="-O2 -DNDEBUG" \
@@ -79,7 +79,8 @@ concatenation is important.
 
 ## Command to Run
 * Command-line options are:
-  ```
+  ```console
+  % ./ph5_concat -h
   mpiexec -n <np> ./ph5_concat [-h|-q|-a|-d|-r|-s|-p] [-t num] [-m size] [-k base_name] [-z level] [-b size] [-o outfile] [-i infile]
 
   [-h]           print this command usage message
@@ -152,27 +153,36 @@ concatenation is important.
     same as the one used in '-k' option.
 
 ## Sample input and output files
-* There are four sample input files provided in folder `examples`.
-  + examples/sample_r11981_s06.h5
-  + examples/sample_r11981_s07.h5
-  + examples/sample_r11981_s08.h5
-  + examples/sample_r11981_s09.h5
-* Sample run commands
+* There are four sample input HDF5 files provided in folder `examples`.
+  + examples/sample_r11981_s06.gz
+  + examples/sample_r11981_s07.gz
+  + examples/sample_r11981_s08.gz
+  + examples/sample_r11981_s09.gz
+* These sample files are previously compressed. Run command 'make' will
+  uncompress them into HDF5 files, or run command below to uncompress them.
+  ```console
+  % gzip -dc examples/sample_r11981_s06.gz > examples/sample_r11981_s06.h5
+  % gzip -dc examples/sample_r11981_s07.gz > examples/sample_r11981_s07.h5
+  % gzip -dc examples/sample_r11981_s08.gz > examples/sample_r11981_s08.h5
+  % gzip -dc examples/sample_r11981_s09.gz > examples/sample_r11981_s09.h5
   ```
-  mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
-  mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
+* Sample run commands
+  ```console
+  % mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
+  % mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
   ```
   The output shown on screen is stored in `examples/sample_stdout.txt`.
 * Sample output files
   + The output files from concatenating the 4 sample files are available in
-    `examples/sample_output.h5` whose metadata dumped from command below is
+    `examples/sample_output.h5.gz` whose metadata dumped from command below is
     also available in `examples/sample_output.metadata`.
-    ```
-    h5dump -Hp sample_output.h5
+    ```console
+    % gzip -dc examples/sample_output.h5.gz > sample_output.h5
+    % h5dump -Hp sample_output.h5
     ```
 
 ## An example timing output from a run on Cori using 128 MPI processes.
-  ```
+  ```console
   % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt
 
   Number of input HDF5 files: 128

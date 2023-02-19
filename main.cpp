@@ -237,7 +237,7 @@ Options::Options(int argc, char **argv) :
              << e.what() << ")" << endl;
         err_exit = true;
         free(in_filename);
-        return;
+        exit(1);
     }
 
     /* read input file contents */

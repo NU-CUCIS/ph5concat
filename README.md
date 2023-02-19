@@ -1,4 +1,5 @@
 # Parallel HDF5 Dataset Concatenation for High Energy Physics Data Analysis
+[![MPICH](https://github.com/NU-CUCIS/ph5concat/actions/workflows/ubuntu_mpich.yml/badge.svg)](https://github.com/NU-CUCIS/ph5concat/actions/workflows/ubuntu_mpich.yml)
 
 This software package contains C++ programs for concatenating HDF5 datasets
 across multiple files into a single file by appending individual datasets one

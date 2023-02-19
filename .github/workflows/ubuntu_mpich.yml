@@ -1,4 +1,4 @@
-name: Stacking Log, Cache, Async VOLs
+name: MPICH
 
 on:
   push:

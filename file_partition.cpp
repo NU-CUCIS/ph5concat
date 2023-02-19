@@ -384,10 +384,12 @@ int Concatenator::read_dataset2(DSInfo_t &dset,
             /* Close and release resources internally allocated by HDF5 for
              * variable-length strings.
              */
-            if (memspace_id == H5S_ALL)
-                err = H5Treclaim(in_dset_type_id, space_id, H5P_DEFAULT, rdata);
-            else
-                err = H5Treclaim(in_dset_type_id, memspace_id, H5P_DEFAULT, rdata);
+            hid_t mspace = (memspace_id == H5S_ALL) ? space_id : memspace_id;
+#if defined HAS_H5TRECLAIM && HAS_H5TRECLAIM
+            err = H5Treclaim(in_dset_type_id, mspace, H5P_DEFAULT, rdata);
+#else
+            err = H5Dvlen_reclaim(in_dset_type_id, mspace, H5P_DEFAULT, rdata);
+#endif
             if (err < 0) HANDLE_ERROR("H5Treclaim");
         }
         else {

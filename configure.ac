@@ -309,6 +309,7 @@ if test "x$hdf5_parallel_io" = xno ; then
      ph5concat requires parallel I/O feature enabled in HDF5. Abort.
    -----------------------------------------------------------------------])
 fi
+
 AC_LANG_POP(C++)
 
 if test "x$LIBS" = x ; then
@@ -346,33 +347,15 @@ else
    AC_DEFINE(MPI_HSIZE_T, MPI_UNSIGNED_INT, [Define MPI datatype corresponding to hsize_t])
 fi
 
-AC_MSG_CHECKING([whether API H5Ovisit3 is available])
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <hdf5.h>]],
-               [[H5Ovisit3(0, H5_INDEX_NAME, H5_ITER_NATIVE, NULL, NULL, H5O_INFO_ALL);]])],
-               [has_H5Ovisit3=yes], [has_H5Ovisit3=no])
-AC_MSG_RESULT([$has_H5Ovisit3])
-if test "x$has_H5Ovisit3" = xyes ; then
-   AC_DEFINE(HAS_H5OVISIT3, 1, [Define if API H5Ovisit3 is defined])
-fi
-
-AC_MSG_CHECKING([whether API H5get_alloc_stats is available])
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <hdf5.h>]],
-               [[herr_t err;
-               unsigned long long total_alloc_bytes;
-               size_t curr_alloc_bytes;
-               size_t peak_alloc_bytes;
-               size_t max_block_size;
-               size_t total_alloc_blocks_count;
-               size_t curr_alloc_blocks_count;
-               size_t peak_alloc_blocks_count;
-               err = H5get_alloc_stats(&total_alloc_bytes, &curr_alloc_bytes,
-               &peak_alloc_bytes, &max_block_size, &total_alloc_blocks_count,
-               &curr_alloc_blocks_count, &peak_alloc_blocks_count);]])],
-               [has_H5get_alloc_stats=yes], [has_H5get_alloc_stats=no])
-AC_MSG_RESULT([$has_H5get_alloc_stats])
-if test "x$has_H5get_alloc_stats" = xyes ; then
-   AC_DEFINE(HAS_H5GET_ALLOC_STATS, 1, [Define if API H5get_alloc_stats is defined])
-fi
+AC_CHECK_DECL(H5Ovisit3,
+              [AC_DEFINE(HAS_H5OVISIT3, 1, [Define if API H5Ovisit3 is defined])],
+              [], [[#include <hdf5.h>]])
+AC_CHECK_DECL(H5Treclaim,
+              [AC_DEFINE(HAS_H5TRECLAIM, 1, [Define if API H5Treclaim is defined])],
+              [], [[#include <hdf5.h>]])
+AC_CHECK_DECL(H5get_alloc_stats,
+              [AC_DEFINE(HAS_H5GET_ALLOC_STATS, 1, [Define if API H5get_alloc_stats is defined])],
+              [], [[#include <hdf5.h>]])
 
 AC_CONFIG_FILES(Makefile utils/Makefile examples/Makefile case_study/Makefile)
 

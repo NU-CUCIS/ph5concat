@@ -288,7 +288,9 @@ seq_create:
 
         /* check if the dataset already exists */
         isExist = H5Lexists(grp_id, seq_name, H5P_DEFAULT);
-        if (isExist >= 0) {
+        if (isExist < 0) CALLBACK_ERROR("H5Lexists", seq_name)
+
+        if (isExist) {
             if (overwrite) {
                 if (verbose) printf("Delete dataset %s/%s\n",grp_name,seq_name);
                 err = H5Ldelete(grp_id, seq_name, H5P_DEFAULT);
@@ -510,7 +512,9 @@ seq_cnt_create:
 
         /* check if the dataset already exists */
         isExist = H5Lexists(grp_id, seq_cnt_name, H5P_DEFAULT);
-        if (isExist >= 0) {
+        if (isExist < 0) CALLBACK_ERROR("H5Lexists", seq_cnt_name)
+
+        if (isExist) {
             if (overwrite) {
                 if (verbose) printf("Delete dataset %s/%s\n",grp_name,seq_cnt_name);
                 err = H5Ldelete(grp_id, seq_cnt_name, H5P_DEFAULT);

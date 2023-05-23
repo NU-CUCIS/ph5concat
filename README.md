@@ -263,4 +263,4 @@ Office of Science, Office of Advanced Scientific Computing Research, Scientific
 Discovery through Advanced Computing ([SciDAC](https://www.scidac.gov)) program.
 This work is a collaboration of [RAPIDS Institute](https://rapids.lbl.gov) and
 [HEP Data Analytics on HPC](https://computing.fnal.gov/hep-on-hpc/).
-
+This work is also supported in part by the DOE awards, United States DE-SC0014330 and DE-SC0019358.

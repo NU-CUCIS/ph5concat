@@ -51,6 +51,8 @@ Bug fix:
   + Fix compression threshold calculation. See a9ea841
 
 Other changes
+  + Remove the HDF5 metadata memory footprint profiling, as H5get_alloc_stats
+    has been removed from HDF5 since 1.14.0. See PR #5.
   + Remove the requirement of group `/spill`. See d4e0852
   + Change chunk setting for small datasets. Set the chunk size to 256K
     element, no matter if the dataset dim[0] is smaller than 256K element or

@@ -354,9 +354,6 @@ AC_CHECK_DECL(H5Ovisit3,
 AC_CHECK_DECL(H5Treclaim,
               [AC_DEFINE(HAS_H5TRECLAIM, 1, [Define if API H5Treclaim is defined])],
               [], [[#include <hdf5.h>]])
-AC_CHECK_DECL(H5get_alloc_stats,
-              [AC_DEFINE(HAS_H5GET_ALLOC_STATS, 1, [Define if API H5get_alloc_stats is defined])],
-              [], [[#include <hdf5.h>]])
 
 AC_ARG_VAR(TESTMPIRUN, [MPI run command for "make check", @<:@default: mpiexec@:>@])
 if test "x${TESTMPIRUN}" = x ; then

@@ -291,7 +291,7 @@ int main(int argc, char **argv)
     /* /spill/run should not be of zero-sized */
     if (dset_dims[0] == 0) RETURN_ERROR("Zero-sized group '/spill'", "run");
 
-    newsrc_name = basename(src_path);
+    newsrc_name = &basename(src_path)[0];
     src_exist = H5Lexists(spill_id, newsrc_name, H5P_DEFAULT);
     if (src_exist < 0) RETURN_ERROR("H5Lexists", newsrc_name)
     if (src_exist > 0) {

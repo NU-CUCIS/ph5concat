@@ -1,7 +1,48 @@
 # ph5concat Release Notes
 
 ---
-## Version _PH5CONCAT_VERSION_ (_PH5CONCAT_RELEASE_DATE_)
+## Version 1.1.0 (Sep. 13, 2023)
+
+* New features
+  + Now support datasets of type H5T_STRING
+  + New command-line option '-c' to use the HDF5 contiguous storage layout.
+
+* Utility programs
+  + New utility program check_seq_incr
+  + add_key
+    * option `-k` to take dataset names separated by comma, to be used to
+      generate partition keys (default: /spill/run,/spill/subrun,/spill/evt)
+    * add option `-r` to specify groups matching pattern are not injected with
+      key dataset
+    * add option `-c` to create sequence-count datasets as partition keys,
+      instead of sequence-only datasets. The suffix of the key datasets will be
+      `seq_cnt`. (default: off)
+    * add option `-a` to create both sequence and sequence-count datasets.
+      (default: off)
+    * add option `-f` to overwrite key datasets if already exist.
+  + add_spill_index
+    * now keeps the data type same as the one provided in option '-s' in
+      sort_file_list.
+    * now can have any number of index datasets in option '-k'.
+    * No longer requires index datasets to H5T_STD_U32LE.
+  + New utility program nu_stat - to collect and print some statistics of data
+    objects stored in an HDF5 file.
+  + New utility program nfile_ocopy - to merge multiple HDF5 files into one, by
+    calling H5Ocopy() for each group.
+
+
+* Other updates
+  + Chunk size setting now is in the unit of array elements, instead of MB.
+  + Change the default chunk size to 256K array elements.
+  + Add a case study based on PandAna read operations.
+
+* Bugs fixed
+  + Fix compile errors on Mac OS.
+  + Fix when the number of processes is more than number of input files
+  + Fix when a dataset is empty in one file but not in others
+
+
+## Version 1.0.0 (Feb. 14, 2020)
 
 * New features
   + Add appending mode. This allows to concatenate new input files and append
@@ -79,5 +120,4 @@ Other changes
     elements.  See bb118bd
 
 ---
-## Version 1.0.0 (February 14, 2020)
 

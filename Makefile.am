@@ -29,7 +29,9 @@ EXTRA_DIST = ph5_concat.hpp \
              AUTHORS.md \
              README.md \
              RELEASE_NOTES.md \
-             list.txt
+             list.txt \
+             meta.yaml \
+             build.sh
 
 dist-hook:
 	$(SED_I) -e "s|_PH5CONCAT_VERSION_|@PH5CONCAT_VERSION@|g" $(distdir)/main.cpp

@@ -184,7 +184,7 @@ herr_t add_seq(hid_t           fid,
     int64_t *seq_buf;
     herr_t err;
     hid_t grp_id=-1, dset, memspace, seq_id, seq_cnt_id;
-    hid_t dcpl_id, in_fspace=-1, out_fspace;
+    hid_t dcpl_id=-1, in_fspace=-1, out_fspace;
     hsize_t dset_dims[2], maxdims[2], chunk_dims[2];
     hsize_t start[2], count[2], ones[2]={1,1};
     htri_t src_exist;
@@ -554,8 +554,10 @@ seq_cnt_create:
 
 fn_exit:
     /* close create property */
-    err = H5Pclose(dcpl_id);
-    if (err < 0) RETURN_ERROR("H5Pclose", dset_name)
+    if (dcpl_id >= 0) {
+        err = H5Pclose(dcpl_id);
+        if (err < 0) RETURN_ERROR("H5Pclose", dset_name)
+    }
 
     GET_TIMER(ts, te, timing[2])
 

@@ -5,7 +5,7 @@ Output datasets are compressed with level 6
 Read metadata from input files takes 0.0096 seconds
 Create output file + datasets takes 0.0149 seconds
 Concatenating 1D datasets takes 0.0480 seconds
-Writ partition key datasets takes 0.0240 seconds
+Write partition key datasets takes 0.0240 seconds
 Concatenating 2D datasets takes 0.0081 seconds
 Close input files takes 0.0005 seconds
 Close output files takes 0.0010 seconds

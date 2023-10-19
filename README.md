@@ -153,91 +153,9 @@ concatenation is important.
     have been created previously in the output file and their names must be the
     same as the one used in '-k' option.
 
-## Sample input and output files
-* There are four sample input HDF5 files provided in folder `examples`.
-  + examples/sample_r11981_s06.gz
-  + examples/sample_r11981_s07.gz
-  + examples/sample_r11981_s08.gz
-  + examples/sample_r11981_s09.gz
-* These sample files are previously compressed. Run command 'make' will
-  uncompress them into HDF5 files, or run command below to uncompress them.
-  ```console
-  % gzip -dc examples/sample_r11981_s06.gz > examples/sample_r11981_s06.h5
-  % gzip -dc examples/sample_r11981_s07.gz > examples/sample_r11981_s07.h5
-  % gzip -dc examples/sample_r11981_s08.gz > examples/sample_r11981_s08.h5
-  % gzip -dc examples/sample_r11981_s09.gz > examples/sample_r11981_s09.h5
-  ```
-* Sample run commands
-  ```console
-  % mpiexec -n 2 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5
-  % mpiexec -n 4 ./ph5_concat -i examples/sample_list.txt -o sample_output.h5 -k evt
-  ```
-  The output shown on screen is stored in `examples/sample_stdout.txt`.
-* Sample output files
-  + The output files from concatenating the 4 sample files are available in
-    `examples/sample_output.h5.gz` whose metadata dumped from command below is
-    also available in `examples/sample_output.metadata`.
-    ```console
-    % gzip -dc examples/sample_output.h5.gz > sample_output.h5
-    % h5dump -Hp sample_output.h5
-    ```
-
-## An example timing output from a run on Cori using 128 MPI processes.
-  ```console
-  % srun -n 128 ./ph5_concat -i ./nd_list_128.txt -o /scratch1/FS_1M_128/nd_out.h5 -b 512 -k evt
-
-  Number of input HDF5 files: 128
-  Input directory name: /global/cscratch1/sd/wkliao/FS_1M_8
-  Output file name: /global/cscratch1/sd/wkliao/FS_1M_128/nd_out.h5
-  Output datasets are compressed with level 6
-  Read metadata from input files takes 1.2776 seconds
-  Create output file + datasets takes 25.7466 seconds
-  Concatenating 1D datasets takes 158.8101 seconds
-  Writ partition key datasets takes 14.0372 seconds
-  Concatenating 2D datasets takes 114.4464 seconds
-  Close input files takes 0.0037 seconds
-  Close output files takes 0.4797 seconds
-  -------------------------------------------------------------
-  Input directory name:                    /scratch/FS_1M_8
-  Number of input HDF5 files:              128
-  Output HDF5 file name:                   /scratch1/FS_1M_128/nd_out.h5
-  Parallel I/O strategy:                   2
-  Use POSIX I/O to open file:              ON
-  POSIX In-memory I/O:                     ON
-  1-process-create-followed-by-all-open:   OFF
-  Chunk caching for raw data:              ON
-  GZIP level:                              6
-  Internal I/O buffer size:                512.0 MiB
-  Dataset used to produce partition key:   evt
-  Name of partition key datasets:          evt.seq
-  -------------------------------------------------------------
-  Number of groups:                         999
-  Number of non-zero-sized groups:          108
-  Number of groups have partition key:      108
-  Total number of datasets:               17971
-  Total number of non-zero datasets:       2795
-  -------------------------------------------------------------
-  Number of MPI processes:                  128
-  Number calls to MPI_Allreduce:              3
-  Number calls to MPI_Exscan:                 2
-  -------------------------------------------------------------
-  H5Dcreate:                             25.6772
-  H5Dread   for 1D datasets:              1.8583
-  H5Dwrite  for 1D datasets:            170.2729
-  H5Dread   for 2D datasets:             19.9304
-  H5Dwrite  for 2D datasets:             93.9265
-  H5Dclose  for  input datasets:          0.0737
-  H5Dclose  for output datasets:          0.0516
-  -------------------------------------------------------------
-  Read metadata from input files:         1.2782
-  Create output file + datasets:         25.7466
-  Concatenate small datasets:           158.8102
-  Write to partition key datasets:       14.0372
-  Concatenate large datasets:           114.4520
-  Close  input files:                     0.0124
-  Close output files:                     0.4799
-  End-to-end:                           314.8095
-  ```
+## Run example
+An example run with small input files for illustration is available in
+folder [examples](./examples).
 
 ## Publications
 * Sunwoo Lee, Kai-yuan Hou, Kewei Wang, Saba Sehrish, Marc Paterno,
